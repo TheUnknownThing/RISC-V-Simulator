@@ -24,7 +24,7 @@ private:
   void broadcast();
 };
 
-inline CPU::CPU(std::string filename) : reg_file(), rob(reg_file), rs(), loader(filename), pc(0) {}
+inline CPU::CPU(std::string filename) : reg_file(), rob(reg_file), rs(reg_file), loader(filename), pc(0) {}
 
 inline void CPU::Tick() {
   fetch();

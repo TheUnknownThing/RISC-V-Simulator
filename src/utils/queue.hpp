@@ -21,6 +21,10 @@ public:
         delete[] arr;
     }
 
+    T& get(int index) {
+        return arr[index];
+    }
+
     // Add an element to the queue
     bool enqueue(const T& value) {
         if (isFull()) return false;
