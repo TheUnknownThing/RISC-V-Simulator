@@ -9,12 +9,12 @@
 class ALU {
 public:
   ALU();
-  uint32_t execute(uint32_t a, uint32_t b, riscv::R_ArithmeticOp) const;
+  int32_t execute(int32_t a, int32_t b, riscv::R_ArithmeticOp) const;
 };
 
 inline ALU::ALU() {}
 
-inline uint32_t ALU::execute(uint32_t a, uint32_t b,
+inline int32_t ALU::execute(int32_t a, int32_t b,
                              riscv::R_ArithmeticOp op) const {
   switch (op) {
   case riscv::R_ArithmeticOp::ADD:
@@ -36,7 +36,7 @@ inline uint32_t ALU::execute(uint32_t a, uint32_t b,
   case riscv::R_ArithmeticOp::SLT:
     return a < b;
   case riscv::R_ArithmeticOp::SLTU:
-    return a < b;
+    return static_cast<uint32_t>(a) < static_cast<uint32_t>(b);
   default:
     throw std::runtime_error("Invalid arithmetic operation");
   }

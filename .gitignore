@@ -9,6 +9,7 @@ CMakeFiles/
 cmake_install.cmake
 Makefile
 *.cmake
+.cache/
 
 # Compiled executables and libraries
 *.exe
