@@ -18,8 +18,8 @@ public:
   void Tick();
 
 private:
-  void fetch();
-  void decode();
+  riscv::DecodedInstruction fetch();
+  void issue(riscv::DecodedInstruction instr);
   void execute();
   void broadcast();
 };
@@ -27,18 +27,29 @@ private:
 inline CPU::CPU(std::string filename) : reg_file(), rob(reg_file), rs(reg_file), loader(filename), pc(0) {}
 
 inline void CPU::Tick() {
-  fetch();
-  decode();
+  riscv::DecodedInstruction instr = fetch();
+  issue(instr);
   execute();
   broadcast();
 }
 
-inline void CPU::fetch() {
+inline riscv::DecodedInstruction CPU::fetch() {
   uint32_t instr = loader.fetchInstruction(pc);
-  riscv::decode(instr);
+  riscv::DecodedInstruction decoded_instr = riscv::decode(instr);
   pc += 4;
+  return decoded_instr;
 }
 
+inline void CPU::issue(riscv::DecodedInstruction instr) {
+  rs.add_entry(instr, instr.rs1, instr.rs2, instr.imm, instr.rd);
+}
 
+inline void CPU::execute() {
+
+}
+
+inline void CPU::broadcast() {
+  rob.receive_broadcast();
+}
 
 #endif // CORE_CPU_HPP
