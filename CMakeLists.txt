@@ -15,16 +15,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
 # Include directories
-include_directories(src)
-include_directories(include)
-
-# Source files
-file(GLOB_RECURSE SOURCES 
-    "src/core/*.cpp"
-    "src/tomasulo/*.cpp" 
-    "src/riscv/*.cpp"
-    "src/utils/*.cpp"
-)
+include_directories(${CMAKE_SOURCE_DIR}/src)
 
 # Main executable
-add_executable(riscv_simulator src/main.cpp ${SOURCES})
+add_executable(riscv_simulator src/main.cpp)
