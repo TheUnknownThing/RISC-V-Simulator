@@ -22,7 +22,17 @@ public:
     }
 
     T& get(int index) {
-        return arr[index];
+        int offset = (frontIdx + index) % capacity;
+        return arr[offset];
+    }
+
+    bool remove(int index) {
+        if (index < 0 || index >= count) return false;
+        for (int i = index; i < count - 1; i++) {
+            arr[i] = arr[i + 1];
+        }
+        count--;
+        return true;
     }
 
     // Add an element to the queue

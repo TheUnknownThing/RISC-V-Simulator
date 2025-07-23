@@ -9,8 +9,8 @@
 #include <optional>
 
 enum class State { ISSUE, EXECUTE, WRITE_RESULT, COMMIT };
-class ReorderBufferEntry {
-public:
+
+struct ReorderBufferEntry {
   ReorderBufferEntry();
   ReorderBufferEntry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_reg, uint32_t id)
       : busy(true), instr(instr), state(State::ISSUE), dest_reg(dest_reg),

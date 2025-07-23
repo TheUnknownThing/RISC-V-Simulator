@@ -6,6 +6,7 @@ public:
   Predictor();
   bool predict();
   void update(bool taken);
+  bool is_available() const;
 
 private:
   enum class State { STRONG_TAKEN, WEAK_TAKEN, WEAK_NOT_TAKEN, STRONG_NOT_TAKEN };
@@ -29,4 +30,9 @@ inline void Predictor::update(bool taken) {
     state = State::WEAK_NOT_TAKEN;
   }
 }
+
+inline bool Predictor::is_available() const {
+  return true;
+}
+
 #endif
