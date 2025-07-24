@@ -24,14 +24,15 @@ public:
   int32_t get_result() const;
 
 private:
-  int32_t execute(int32_t a, int32_t b, riscv::R_ArithmeticOp) const;
+  int32_t execute(int32_t a, int32_t b, std::variant<riscv::R_ArithmeticOp, riscv::I_ArithmeticOp, riscv::U_Op> op) const;
 };
 
 inline ALU::ALU() : cycle_remaining(0) {}
 
 inline int32_t ALU::execute(int32_t a, int32_t b,
-                             riscv::R_ArithmeticOp op) const {
-  switch (op) {
+                             std::variant<riscv::R_ArithmeticOp, riscv::I_ArithmeticOp, riscv::U_Op> op) const {
+  if (std::holds_alternative<riscv::R_ArithmeticOp>(op)) {
+  switch (std::get<riscv::R_ArithmeticOp>(op)) {
   case riscv::R_ArithmeticOp::ADD:
     return a + b;
   case riscv::R_ArithmeticOp::SUB:
@@ -52,9 +53,43 @@ inline int32_t ALU::execute(int32_t a, int32_t b,
     return a < b;
   case riscv::R_ArithmeticOp::SLTU:
     return static_cast<uint32_t>(a) < static_cast<uint32_t>(b);
-  default:
-    throw std::runtime_error("Invalid arithmetic operation");
+    default:
+      throw std::runtime_error("Invalid arithmetic operation");
+    }
+  } else if (std::holds_alternative<riscv::I_ArithmeticOp>(op)) {
+    switch (std::get<riscv::I_ArithmeticOp>(op)) {
+    case riscv::I_ArithmeticOp::ADDI:
+      return a + b;
+    case riscv::I_ArithmeticOp::ANDI:
+      return a & b;
+    case riscv::I_ArithmeticOp::ORI:
+      return a | b;
+    case riscv::I_ArithmeticOp::XORI:
+      return a ^ b;
+    case riscv::I_ArithmeticOp::SLLI:
+      return a << b;
+    case riscv::I_ArithmeticOp::SRLI:
+      return a >> b;
+    case riscv::I_ArithmeticOp::SRAI:
+      return a >> b;
+    case riscv::I_ArithmeticOp::SLTI:
+      return a < b;
+    case riscv::I_ArithmeticOp::SLTIU:
+      return static_cast<uint32_t>(a) < static_cast<uint32_t>(b);
+    default:
+      throw std::runtime_error("Invalid arithmetic operation");
+    }
+  } else if (std::holds_alternative<riscv::U_Op>(op)) {
+    switch (std::get<riscv::U_Op>(op)) {
+    case riscv::U_Op::LUI:
+      return a << 12;
+    case riscv::U_Op::AUIPC:
+      return a + b;
+    default:
+      throw std::runtime_error("Invalid arithmetic operation");
+    }
   }
+  throw std::runtime_error("Invalid arithmetic operation");
 }
 
 inline void ALU::set_instruction(ALUInstruction instruction) {

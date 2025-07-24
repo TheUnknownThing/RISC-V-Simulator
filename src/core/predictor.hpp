@@ -2,6 +2,7 @@
 #define CORE_PREDICTOR_HPP
 
 #include <cstdint>
+
 struct PredictorInstruction {
   uint32_t pc;
   bool taken;
