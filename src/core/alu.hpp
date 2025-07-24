@@ -10,24 +10,26 @@ struct ALUInstruction {
   int32_t a;
   int32_t b;
   std::variant<riscv::R_ArithmeticOp, riscv::I_ArithmeticOp, riscv::U_Op> op;
+  uint32_t dest_tag;
 };
 
 class ALU {
   ALUInstruction instruction;
   int32_t result;
+  uint32_t dest_tag;
   uint32_t cycle_remaining;
 public:
   ALU();
   bool is_available() const;
   void tick();
   void set_instruction(ALUInstruction instruction);
-  int32_t get_result() const;
+  std::pair<int32_t, uint32_t> get_result() const;
 
 private:
   int32_t execute(int32_t a, int32_t b, std::variant<riscv::R_ArithmeticOp, riscv::I_ArithmeticOp, riscv::U_Op> op) const;
 };
 
-inline ALU::ALU() : cycle_remaining(0) {}
+inline ALU::ALU() : cycle_remaining(0), dest_tag(0) {}
 
 inline int32_t ALU::execute(int32_t a, int32_t b,
                              std::variant<riscv::R_ArithmeticOp, riscv::I_ArithmeticOp, riscv::U_Op> op) const {
@@ -95,10 +97,11 @@ inline int32_t ALU::execute(int32_t a, int32_t b,
 inline void ALU::set_instruction(ALUInstruction instruction) {
   this->instruction = instruction;
   cycle_remaining = 1;
+  dest_tag = instruction.dest_tag;
 }
 
-inline int32_t ALU::get_result() const {
-  return result;
+inline std::pair<int32_t, uint32_t> ALU::get_result() const {
+  return std::make_pair(result, dest_tag);
 }
 
 inline bool ALU::is_available() const {
@@ -106,9 +109,7 @@ inline bool ALU::is_available() const {
 }
 
 inline void ALU::tick() {
-  if (cycle_remaining > 0) {
-    cycle_remaining--;
-  } else {
+  if (cycle_remaining == 1) {
     result = execute(instruction.a, instruction.b, instruction.op);
     cycle_remaining = 0;
   }

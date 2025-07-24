@@ -12,13 +12,13 @@ enum class State { ISSUE, EXECUTE, WRITE_RESULT, COMMIT };
 
 struct ReorderBufferEntry {
   ReorderBufferEntry();
-  ReorderBufferEntry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_reg, uint32_t id)
-      : busy(true), instr(instr), state(State::ISSUE), dest_reg(dest_reg),
+  ReorderBufferEntry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_tag, uint32_t id)
+      : busy(true), instr(instr), state(State::ISSUE), dest_tag(dest_tag),
         value(-1), ready(false), exception_flag(false), id(id) {}
   bool busy;
   riscv::DecodedInstruction instr;
   State state;
-  std::optional<uint32_t> dest_reg;
+  std::optional<uint32_t> dest_tag;
   double value;
   bool ready;
   bool exception_flag;
@@ -36,10 +36,10 @@ public:
   /**
    * @brief Add an entry to the reorder buffer
    * @param instr The instruction to add
-   * @param dest_reg The destination register
+   * @param dest_tag The destination register
    * @return The ID of the entry
    */
-  int add_entry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_reg);
+  int add_entry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_tag);
   void commit();
   void receive_broadcast();
 };
@@ -48,9 +48,9 @@ inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file)
     : rob(32), reg_file(reg_file) {}
 
 inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
-                                    std::optional<uint32_t> dest_reg) {
+                                    std::optional<uint32_t> dest_tag) {
   if (!rob.isFull()) {
-    ReorderBufferEntry ent(instr, dest_reg, cur_id++);
+    ReorderBufferEntry ent(instr, dest_tag, cur_id++);
     rob.enqueue(ent);
     return ent.id;
   }
@@ -61,8 +61,8 @@ inline void ReorderBuffer::commit() {
   const auto &ent = rob.front();
   if (ent.state == State::COMMIT) {
     // commit the instruction
-    if (ent.dest_reg.has_value()) {
-      reg_file.write(ent.dest_reg.value(), ent.value);
+    if (ent.dest_tag.has_value()) {
+      reg_file.write(ent.dest_tag.value(), ent.value);
     }
     rob.dequeue();
   }

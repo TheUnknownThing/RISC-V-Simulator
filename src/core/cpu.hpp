@@ -7,7 +7,7 @@
 #include "../utils/binary_loader.hpp"
 #include "../utils/logger.hpp"
 #include "alu.hpp"
-#include "memory.hpp"
+#include "lsb.hpp"
 #include "predictor.hpp"
 #include "register_file.hpp"
 
@@ -111,6 +111,7 @@ inline void CPU::execute() {
         instruction.a = ent.vj;
         instruction.b = ent.vk;
         instruction.op = std::get<riscv::R_Instruction>(ent.op).op;
+        instruction.dest_tag = ent.dest_tag;
         alu.set_instruction(instruction);
         dispatched = true;
       }
@@ -129,6 +130,7 @@ inline void CPU::execute() {
           instruction.a = ent.vj;
           instruction.b = ent.vk;
           instruction.op = std::get<riscv::I_ArithmeticOp>(i_instr->op);
+          instruction.dest_tag = ent.dest_tag;
           alu.set_instruction(instruction);
           dispatched = true;
         }
@@ -158,13 +160,17 @@ inline void CPU::execute() {
         instruction.a = ent.vj;
         instruction.b = ent.vk;
         instruction.op = std::get<riscv::U_Instruction>(ent.op).op;
+        instruction.dest_tag = ent.dest_tag;
         alu.set_instruction(instruction);
         dispatched = true;
       }
     } else if (std::holds_alternative<riscv::J_Instruction>(ent.op)) {
       // Jump -> Predictor
       if (pred.is_available()) {
-        pred.execute(ent);
+        PredictorInstruction instruction;
+        // instruction.pc = ent.pc;
+        // BUGGY! Need fix.
+        pred.set_instruction(instruction);
         dispatched = true;
       }
     }
@@ -174,9 +180,16 @@ inline void CPU::execute() {
       i--;
     }
   }
+
+  alu.tick();
+  mem.tick();
+  pred.tick();
 }
 
-inline void CPU::broadcast() { rob.receive_broadcast(); }
+inline void CPU::broadcast() {
+  rob.receive_broadcast();
+  rs.receive_broadcast();
+}
 
 inline void CPU::commit() { rob.commit(); }
 

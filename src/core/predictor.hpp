@@ -5,7 +5,6 @@
 
 struct PredictorInstruction {
   uint32_t pc;
-  bool taken;
 };
 
 class Predictor {
@@ -25,7 +24,7 @@ private:
   State state;
 };
 
-inline Predictor::Predictor() : state(State::STRONG_NOT_TAKEN), cycle_remaining(0) {}
+inline Predictor::Predictor() : cycle_remaining(0), state(State::STRONG_NOT_TAKEN) {}
 
 inline void Predictor::update(bool taken) {
   if (state == State::STRONG_TAKEN && taken) {
@@ -56,8 +55,8 @@ inline void Predictor::set_instruction(PredictorInstruction instruction) {
 }
 
 inline void Predictor::tick() {
-  if (cycle_remaining > 0) {
-    cycle_remaining--;
+  if (cycle_remaining == 1) {
+    cycle_remaining = 0;
   }
 }
 

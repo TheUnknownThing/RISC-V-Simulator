@@ -27,6 +27,7 @@ public:
   CircularQueue<ReservationStationEntry> rs;
   ReservationStation(RegisterFile &reg_file);
   void add_entry(const riscv::DecodedInstruction &op, std::optional<uint32_t> qj, std::optional<uint32_t> qk, std::optional<uint32_t> imm, int dest_tag);
+  void receive_broadcast();
 };
 
 ReservationStation::ReservationStation(RegisterFile &reg_file) : rs(32), reg_file(reg_file) {}
@@ -51,6 +52,15 @@ void ReservationStation::add_entry(const riscv::DecodedInstruction &op, std::opt
     }
     ReservationStationEntry ent(op, qj, qk, vj, vk, imm.value(), dest_tag);
     rs.enqueue(ent);
+  }
+}
+
+void ReservationStation::receive_broadcast() {
+  for (int i = 0; i < rs.size(); i++) {
+    ReservationStationEntry &ent = rs.get(i);
+    if (ent.qj == 0) {
+      ent.vj = reg_file.read(ent.src1);
+    }
   }
 }
 
