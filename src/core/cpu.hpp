@@ -5,6 +5,7 @@
 #include "../tomasulo/reorder_buffer.hpp"
 #include "../tomasulo/reservation_station.hpp"
 #include "../utils/binary_loader.hpp"
+#include "../utils/logger.hpp"
 #include "alu.hpp"
 #include "memory.hpp"
 #include "predictor.hpp"
@@ -106,7 +107,11 @@ inline void CPU::execute() {
     if (std::holds_alternative<riscv::R_Instruction>(ent.op)) {
       // R-type -> ALU
       if (alu.is_available()) {
-        alu.execute(ent);
+        ALUInstruction instruction;
+        instruction.a = ent.vj;
+        instruction.b = ent.vk;
+        instruction.op = std::get<riscv::R_Instruction>(ent.op).op;
+        alu.set_instruction(instruction);
         dispatched = true;
       }
     } else if (auto *i_instr = std::get_if<riscv::I_Instruction>(&ent.op)) {
@@ -120,7 +125,11 @@ inline void CPU::execute() {
       } else if (std::holds_alternative<riscv::I_ArithmeticOp>(i_instr->op)) {
         // Arithmetic -> ALU
         if (alu.is_available()) {
-          alu.execute(ent);
+          ALUInstruction instruction;
+          instruction.a = ent.vj;
+          instruction.b = ent.vk;
+          instruction.op = std::get<riscv::I_ArithmeticOp>(i_instr->op);
+          alu.set_instruction(instruction);
           dispatched = true;
         }
       } else if (std::holds_alternative<riscv::I_JumpOp>(i_instr->op)) {
@@ -145,7 +154,11 @@ inline void CPU::execute() {
     } else if (std::holds_alternative<riscv::U_Instruction>(ent.op)) {
       // U-type -> ALU
       if (alu.is_available()) {
-        alu.execute(ent);
+        ALUInstruction instruction;
+        instruction.a = ent.vj;
+        instruction.b = ent.vk;
+        instruction.op = std::get<riscv::U_Instruction>(ent.op).op;
+        alu.set_instruction(instruction);
         dispatched = true;
       }
     } else if (std::holds_alternative<riscv::J_Instruction>(ent.op)) {

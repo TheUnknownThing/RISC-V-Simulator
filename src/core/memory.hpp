@@ -4,6 +4,12 @@
 #include <cstdint>
 #include <array>
 
+struct LSBEntry {
+    uint32_t address;
+    uint8_t value;
+    uint32_t cycle_remaining;
+};
+
 class Memory {
   std::array<uint8_t, 1024> memory;
   uint8_t cycle_remaining;
