@@ -17,26 +17,20 @@ struct ALUResult {
   uint32_t dest_tag;
 };
 
-enum class ALUState {
-  IDLE,        // Ready to accept new instruction
-  BUSY,        // Executing instruction
-  RESULT_READY // Result is ready but not consumed yet
-};
-
 class ALU {
   ALUInstruction instruction;
-  ALUResult result;
+  ALUResult current_result;  // Result being computed this cycle
+  ALUResult previous_result; // Result from previous cycle (for broadcast)
   uint32_t cycle_remaining;
-  ALUState state;
+  bool has_previous_result;
 
 public:
   ALU();
-  bool is_available() const; // Can accept new instruction
-  bool has_result() const;   // Has result ready to be consumed
+  bool is_available() const;
+  bool has_result_for_broadcast() const;
   void tick();
   void set_instruction(ALUInstruction instruction);
-  ALUResult get_result();        // Consumes the result
-  ALUResult peek_result() const; // View result without consuming
+  ALUResult get_result_for_broadcast() const;
 
 private:
   int32_t execute(
@@ -45,7 +39,52 @@ private:
           op) const;
 };
 
-inline ALU::ALU() : cycle_remaining(0), state(ALUState::IDLE) {}
+inline ALU::ALU() : cycle_remaining(0), has_previous_result(false) {}
+
+inline bool ALU::is_available() const {
+  return cycle_remaining == 0;
+}
+
+inline bool ALU::has_result_for_broadcast() const {
+  return has_previous_result;
+}
+
+inline void ALU::set_instruction(ALUInstruction instruction) {
+  if (!is_available()) {
+    throw std::runtime_error("ALU is busy");
+  }
+
+  this->instruction = instruction;
+  cycle_remaining = 1;
+}
+
+inline ALUResult ALU::get_result_for_broadcast() const {
+  if (!has_previous_result) {
+    throw std::runtime_error("No result available for broadcast");
+  }
+  return previous_result;
+}
+
+inline void ALU::tick() {
+  // current becomes previous
+  if (cycle_remaining == 1) {
+    current_result.result =
+        execute(instruction.a, instruction.b, instruction.op);
+    current_result.dest_tag = instruction.dest_tag;
+  }
+
+  if (cycle_remaining == 1) {
+    previous_result = current_result;
+    has_previous_result = true;
+  } else if (cycle_remaining == 0 && has_previous_result) {
+    // Previous result has been available for broadcast for one cycle
+    has_previous_result = false; // Clear it after one cycle
+  }
+
+  if (cycle_remaining > 0) {
+    cycle_remaining--;
+  }
+}
 
 inline int32_t ALU::execute(
     int32_t a, int32_t b,
@@ -65,11 +104,11 @@ inline int32_t ALU::execute(
     case riscv::R_ArithmeticOp::XOR:
       return a ^ b;
     case riscv::R_ArithmeticOp::SLL:
-      return a << (b & 0x1F); // Only use lower 5 bits for shift amount
+      return a << (b & 0x1F);
     case riscv::R_ArithmeticOp::SRL:
-      return static_cast<uint32_t>(a) >> (b & 0x1F); // Logical right shift
+      return static_cast<uint32_t>(a) >> (b & 0x1F);
     case riscv::R_ArithmeticOp::SRA:
-      return a >> (b & 0x1F); // Arithmetic right shift
+      return a >> (b & 0x1F);
     case riscv::R_ArithmeticOp::SLT:
       return (a < b) ? 1 : 0;
     case riscv::R_ArithmeticOp::SLTU:
@@ -103,58 +142,14 @@ inline int32_t ALU::execute(
   } else if (std::holds_alternative<riscv::U_Op>(op)) {
     switch (std::get<riscv::U_Op>(op)) {
     case riscv::U_Op::LUI:
-      return b << 12; // LUI loads immediate into upper 20 bits
+      return b << 12;
     case riscv::U_Op::AUIPC:
-      return a + (b << 12); // Add upper immediate to PC
+      return a + (b << 12);
     default:
       throw std::runtime_error("Invalid U-type operation");
     }
   }
   throw std::runtime_error("Invalid arithmetic operation variant");
-}
-
-inline void ALU::set_instruction(ALUInstruction instruction) {
-  if (state != ALUState::IDLE) {
-    throw std::runtime_error("ALU is not available for new instruction");
-  }
-
-  this->instruction = instruction;
-  cycle_remaining = 1; // You can adjust this for multi-cycle operations
-  state = ALUState::BUSY;
-}
-
-inline ALUResult ALU::get_result() {
-  if (state != ALUState::RESULT_READY) {
-    throw std::runtime_error("ALU result is not ready");
-  }
-
-  ALUResult temp_result = result;
-  state = ALUState::IDLE; // Consume the result
-  return temp_result;
-}
-
-inline ALUResult ALU::peek_result() const {
-  if (state != ALUState::RESULT_READY) {
-    throw std::runtime_error("ALU result is not ready");
-  }
-  return result;
-}
-
-inline bool ALU::is_available() const { return state == ALUState::IDLE; }
-
-inline bool ALU::has_result() const { return state == ALUState::RESULT_READY; }
-
-inline void ALU::tick() {
-  if (state == ALUState::BUSY && cycle_remaining > 0) {
-    cycle_remaining--;
-    if (cycle_remaining == 0) {
-      // Compute result and transition to RESULT_READY state
-      result.result = execute(instruction.a, instruction.b, instruction.op);
-      result.dest_tag = instruction.dest_tag;
-      state = ALUState::RESULT_READY;
-    }
-  }
-  // If state is IDLE or RESULT_READY, do nothing
 }
 
 #endif // CORE_ALU_HPP
