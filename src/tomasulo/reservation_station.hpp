@@ -17,7 +17,6 @@ struct ReservationStationEntry {
   int qj, qk;
   int imm;
   uint32_t dest_tag;
-  int cycles_remaining;
 };
 
 class ReservationStation {
@@ -55,11 +54,12 @@ void ReservationStation::add_entry(const riscv::DecodedInstruction &op, std::opt
   }
 }
 
-void ReservationStation::receive_broadcast() {
+void ReservationStation::receive_broadcast(int32_t value, uint32_t dest_tag) {
   for (int i = 0; i < rs.size(); i++) {
     ReservationStationEntry &ent = rs.get(i);
-    if (ent.qj == 0) {
-      ent.vj = reg_file.read(ent.src1);
+    if (ent.dest_tag == dest_tag) {
+      ent.vj = value;
+      break;
     }
   }
 }

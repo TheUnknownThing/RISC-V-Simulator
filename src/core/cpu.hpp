@@ -34,7 +34,7 @@ private:
 };
 
 inline CPU::CPU(std::string filename)
-    : reg_file(), rob(reg_file), rs(reg_file), loader(filename), pc(0) {}
+    : reg_file(), rs(reg_file), rob(reg_file, alu, pred, mem, rs), loader(filename), pc(0) {}
 
 inline void CPU::Tick() {
   riscv::DecodedInstruction instr = fetch();
@@ -188,7 +188,6 @@ inline void CPU::execute() {
 
 inline void CPU::broadcast() {
   rob.receive_broadcast();
-  rs.receive_broadcast();
 }
 
 inline void CPU::commit() { rob.commit(); }

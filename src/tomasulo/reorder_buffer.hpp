@@ -3,21 +3,22 @@
 
 #include "../core/register_file.hpp"
 #include "../riscv/instruction.hpp"
+#include "reservation_station.hpp"
 #include "../utils/queue.hpp"
+#include "core/alu.hpp"
+#include "core/lsb.hpp"
+#include "core/predictor.hpp"
 #include <array>
 #include <cstdint>
 #include <optional>
 
-enum class State { ISSUE, EXECUTE, WRITE_RESULT, COMMIT };
 
 struct ReorderBufferEntry {
   ReorderBufferEntry();
   ReorderBufferEntry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_tag, uint32_t id)
-      : busy(true), instr(instr), state(State::ISSUE), dest_tag(dest_tag),
+      : instr(instr), dest_tag(dest_tag),
         value(-1), ready(false), exception_flag(false), id(id) {}
-  bool busy;
   riscv::DecodedInstruction instr;
-  State state;
   std::optional<uint32_t> dest_tag;
   double value;
   bool ready;
@@ -29,9 +30,13 @@ class ReorderBuffer {
   CircularQueue<ReorderBufferEntry> rob;
   uint32_t cur_id = 0;
   RegisterFile &reg_file;
+  ALU &alu;
+  Predictor &predictor;
+  Memory &mem;
+  ReservationStation &rs;
 
 public:
-  ReorderBuffer(RegisterFile &reg_file);
+  ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, Memory &mem, ReservationStation &rs);
 
   /**
    * @brief Add an entry to the reorder buffer
@@ -44,8 +49,8 @@ public:
   void receive_broadcast();
 };
 
-inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file)
-    : rob(32), reg_file(reg_file) {}
+inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, Memory &mem, ReservationStation &rs)
+    : rob(32), reg_file(reg_file), alu(alu), predictor(predictor), mem(mem), rs(rs) {}
 
 inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
                                     std::optional<uint32_t> dest_tag) {
@@ -59,12 +64,55 @@ inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
 
 inline void ReorderBuffer::commit() {
   const auto &ent = rob.front();
-  if (ent.state == State::COMMIT) {
+  if (ent.ready) {
     // commit the instruction
     if (ent.dest_tag.has_value()) {
       reg_file.write(ent.dest_tag.value(), ent.value);
+      if (reg_file.get_rob(ent.dest_tag.value()) == ent.id) {
+        reg_file.mark_available(ent.dest_tag.value());
+      }
     }
     rob.dequeue();
+  }
+}
+
+inline void ReorderBuffer::receive_broadcast() {
+  // check ALU, Predictor, and LSB
+  if (alu.is_available()) {
+    ALUResult result = alu.get_result();
+    for (int i = 0; i < rob.size(); i++) {
+      ReorderBufferEntry &ent = rob.get(i);
+      if (ent.dest_tag == result.dest_tag) {
+        ent.value = result.result;
+        ent.ready = true;
+        rs.receive_broadcast(result.result, result.dest_tag);
+        break;
+      }
+    }
+  }
+  if (predictor.is_available()) {
+    PredictorResult result = predictor.get_result();
+    for (int i = 0; i < rob.size(); i++) {
+      ReorderBufferEntry &ent = rob.get(i);
+      if (ent.dest_tag == result.dest_tag) {
+        ent.value = result.result;
+        ent.ready = true;
+        rs.receive_broadcast(result.result, result.dest_tag);
+        break;
+      }
+    }
+  }
+  if (mem.is_available()) {
+    MemResult result = mem.get_result();
+    for (int i = 0; i < rob.size(); i++) {
+      ReorderBufferEntry &ent = rob.get(i);
+      if (ent.dest_tag == result.dest_tag) {
+        ent.value = result.result;
+        ent.ready = true;
+        rs.receive_broadcast(result.result, result.dest_tag);
+        break;
+       }
+    }
   }
 }
 
