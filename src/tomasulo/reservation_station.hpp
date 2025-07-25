@@ -11,11 +11,11 @@
 
 struct ReservationStationEntry {
   ReservationStationEntry();
-  ReservationStationEntry(riscv::DecodedInstruction op, int qj, int qk, int vj, int vk, int imm, uint32_t dest_tag) : op(op), qj(qj), qk(qk), vj(vj), vk(vk), imm(imm), dest_tag(dest_tag) {}
+  ReservationStationEntry(riscv::DecodedInstruction op, int qj, int qk, int vj, int vk, int imm, uint32_t dest_tag) : op(op), vj(vj), vk(vk), qj(qj), qk(qk), imm(imm), dest_tag(dest_tag) {}
   riscv::DecodedInstruction op;
-  double vj, vk;
+  int32_t vj, vk;
   int qj, qk;
-  int imm;
+  int32_t imm;
   uint32_t dest_tag;
 };
 
@@ -26,12 +26,12 @@ public:
   CircularQueue<ReservationStationEntry> rs;
   ReservationStation(RegisterFile &reg_file);
   void add_entry(const riscv::DecodedInstruction &op, std::optional<uint32_t> qj, std::optional<uint32_t> qk, std::optional<uint32_t> imm, int dest_tag);
-  void receive_broadcast();
+  void receive_broadcast(int32_t value, uint32_t dest_tag);
 };
 
-ReservationStation::ReservationStation(RegisterFile &reg_file) : rs(32), reg_file(reg_file) {}
+inline ReservationStation::ReservationStation(RegisterFile &reg_file) : reg_file(reg_file), rs(32) {}
 
-void ReservationStation::add_entry(const riscv::DecodedInstruction &op, std::optional<uint32_t> src1, std::optional<uint32_t> src2, std::optional<uint32_t> imm, int dest_tag) {
+inline void ReservationStation::add_entry(const riscv::DecodedInstruction &op, std::optional<uint32_t> src1, std::optional<uint32_t> src2, std::optional<uint32_t> imm, int dest_tag) {
   if (!rs.isFull()) {
     // fetch qj and qk from reg_file
     int vj = 0;
@@ -54,11 +54,16 @@ void ReservationStation::add_entry(const riscv::DecodedInstruction &op, std::opt
   }
 }
 
-void ReservationStation::receive_broadcast(int32_t value, uint32_t dest_tag) {
+inline void ReservationStation::receive_broadcast(int32_t value, uint32_t dest_tag) {
   for (int i = 0; i < rs.size(); i++) {
     ReservationStationEntry &ent = rs.get(i);
     if (ent.dest_tag == dest_tag) {
-      ent.vj = value;
+      if (ent.qj == 0) {
+        ent.vj = value;
+      }
+      if (ent.qk == 0) {
+        ent.vk = value;
+      }
       break;
     }
   }

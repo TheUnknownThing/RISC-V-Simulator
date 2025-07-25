@@ -78,8 +78,8 @@ inline void ReorderBuffer::commit() {
 
 inline void ReorderBuffer::receive_broadcast() {
   // check ALU, Predictor, and LSB
-  if (alu.is_available()) {
-    ALUResult result = alu.get_result();
+  if (alu.has_result_for_broadcast()) {
+    ALUResult result = alu.get_result_for_broadcast();
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
       if (ent.dest_tag == result.dest_tag) {
@@ -90,8 +90,8 @@ inline void ReorderBuffer::receive_broadcast() {
       }
     }
   }
-  if (predictor.is_available()) {
-    PredictorResult result = predictor.get_result();
+  if (predictor.has_result_for_broadcast()) {
+    PredictorResult result = predictor.get_result_for_broadcast();
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
       if (ent.dest_tag == result.dest_tag) {
@@ -102,8 +102,8 @@ inline void ReorderBuffer::receive_broadcast() {
       }
     }
   }
-  if (mem.is_available()) {
-    MemResult result = mem.get_result();
+  if (mem.has_result_for_broadcast()) {
+    MemResult result = mem.get_result_for_broadcast();
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
       if (ent.dest_tag == result.dest_tag) {

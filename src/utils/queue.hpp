@@ -58,8 +58,18 @@ public:
         return arr[frontIdx];
     }
 
+    T& front() {
+        if (isEmpty()) return T();
+        return arr[frontIdx];
+    }
+
     // Get the rear element
     T rear() const {
+        if (isEmpty()) return T();
+        return arr[rearIdx];
+    }
+
+    T& rear() {
         if (isEmpty()) return T();
         return arr[rearIdx];
     }
