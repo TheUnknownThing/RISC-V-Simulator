@@ -1,6 +1,7 @@
 #ifndef CORE_ALU_HPP
 #define CORE_ALU_HPP
 #include "../riscv/instruction.hpp"
+#include <optional>
 #include <stdexcept>
 #include <stdint.h>
 #include <variant>
@@ -18,11 +19,10 @@ struct ALUResult {
 };
 
 class ALU {
-  ALUInstruction instruction;
-  ALUResult current_result;  // Result being computed this cycle
-  ALUResult previous_result; // Result from previous cycle (for broadcast)
-  uint32_t cycle_remaining;
-  bool has_previous_result;
+  std::optional<ALUInstruction> current_instruction;
+  std::optional<ALUResult> broadcast_result;
+  std::optional<ALUResult> next_broadcast_result;
+  bool busy;
 
 public:
   ALU();
@@ -39,50 +39,43 @@ private:
           op) const;
 };
 
-inline ALU::ALU() : cycle_remaining(0), has_previous_result(false) {}
+inline ALU::ALU()
+    : current_instruction(std::nullopt), broadcast_result(std::nullopt),
+      next_broadcast_result(std::nullopt),
+      busy(false) {}
 
-inline bool ALU::is_available() const {
-  return cycle_remaining == 0;
-}
+inline bool ALU::is_available() const { return !busy; }
 
 inline bool ALU::has_result_for_broadcast() const {
-  return has_previous_result;
+  return broadcast_result.has_value();
 }
 
 inline void ALU::set_instruction(ALUInstruction instruction) {
-  if (!is_available()) {
-    throw std::runtime_error("ALU is busy");
-  }
-
-  this->instruction = instruction;
-  cycle_remaining = 1;
+  current_instruction = instruction;
+  busy = true;
 }
 
 inline ALUResult ALU::get_result_for_broadcast() const {
-  if (!has_previous_result) {
+  if (!broadcast_result.has_value()) {
     throw std::runtime_error("No result available for broadcast");
   }
-  return previous_result;
+  return broadcast_result.value();
 }
 
 inline void ALU::tick() {
-  // current becomes previous
-  if (cycle_remaining == 1) {
-    current_result.result =
-        execute(instruction.a, instruction.b, instruction.op);
-    current_result.dest_tag = instruction.dest_tag;
-  }
+  broadcast_result = next_broadcast_result;
 
-  if (cycle_remaining == 1) {
-    previous_result = current_result;
-    has_previous_result = true;
-  } else if (cycle_remaining == 0 && has_previous_result) {
-    // Previous result has been available for broadcast for one cycle
-    has_previous_result = false; // Clear it after one cycle
-  }
+  if (current_instruction.has_value()) {
+    ALUResult new_result;
+    new_result.result = execute(current_instruction->a, current_instruction->b,
+                                current_instruction->op);
+    new_result.dest_tag = current_instruction->dest_tag;
 
-  if (cycle_remaining > 0) {
-    cycle_remaining--;
+    next_broadcast_result = new_result;
+    current_instruction = std::nullopt;
+  } else {
+    next_broadcast_result = std::nullopt;
+    busy = false;
   }
 }
 

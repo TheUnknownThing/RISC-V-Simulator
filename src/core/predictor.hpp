@@ -2,62 +2,102 @@
 #define CORE_PREDICTOR_HPP
 
 #include <cstdint>
+#include <optional>
+#include <stdexcept>
 
 struct PredictorInstruction {
-  uint32_t pc;
+    uint32_t pc;
+};
+
+struct PredictorResult {
+    bool prediction;
+    uint32_t pc;
 };
 
 class Predictor {
-  PredictorInstruction instruction;
-  uint32_t cycle_remaining;
+    std::optional<PredictorInstruction> current_instruction;
+    std::optional<PredictorResult> broadcast_result;
+    std::optional<PredictorResult> next_broadcast_result;
+    bool busy;
 public:
-  Predictor();
-  void predict();
-  void update(bool taken);
-  bool is_available() const;
-  void set_instruction(PredictorInstruction instruction);
-  bool get_prediction() const;
-  void tick();
+    Predictor();
+    void update(bool taken);
+    bool is_available() const;
+    void set_instruction(PredictorInstruction instruction);
+    bool has_result_for_broadcast() const;
+    PredictorResult get_result_for_broadcast() const;
+    void tick();
 
 private:
-  enum class State { STRONG_TAKEN, WEAK_TAKEN, WEAK_NOT_TAKEN, STRONG_NOT_TAKEN };
-  State state;
+    enum class State { STRONG_TAKEN, WEAK_TAKEN, WEAK_NOT_TAKEN, STRONG_NOT_TAKEN };
+    State state;
+    
+    bool predict() const;
 };
 
-inline Predictor::Predictor() : cycle_remaining(0), state(State::STRONG_NOT_TAKEN) {}
+inline Predictor::Predictor() : current_instruction(std::nullopt), 
+                                broadcast_result(std::nullopt), 
+                                next_broadcast_result(std::nullopt),
+                                state(State::WEAK_NOT_TAKEN),
+                                busy(false) {}
 
 inline void Predictor::update(bool taken) {
-  if (state == State::STRONG_TAKEN && taken) {
-    state = State::STRONG_TAKEN;
-  } else if (state == State::WEAK_TAKEN && taken) {
-    state = State::STRONG_TAKEN;
-  } else if (state == State::WEAK_NOT_TAKEN && !taken) {
-    state = State::STRONG_NOT_TAKEN;
-  } else if (state == State::STRONG_NOT_TAKEN && !taken) {
-    state = State::WEAK_NOT_TAKEN;
-  }
+    switch (state) {
+        case State::STRONG_TAKEN:
+            if (!taken) state = State::WEAK_TAKEN;
+            break;
+        case State::WEAK_TAKEN:
+            if (taken) state = State::STRONG_TAKEN;
+            else state = State::WEAK_NOT_TAKEN;
+            break;
+        case State::WEAK_NOT_TAKEN:
+            if (taken) state = State::WEAK_TAKEN;
+            else state = State::STRONG_NOT_TAKEN;
+            break;
+        case State::STRONG_NOT_TAKEN:
+            if (taken) state = State::WEAK_NOT_TAKEN;
+            break;
+    }
 }
 
 inline bool Predictor::is_available() const {
-  return cycle_remaining == 0;
+    return !busy;
 }
 
-inline bool Predictor::get_prediction() const {
-  if (cycle_remaining == 0) {
-    return state == State::STRONG_TAKEN || state == State::WEAK_TAKEN;
-  }
-  return false;
+inline bool Predictor::has_result_for_broadcast() const {
+    return broadcast_result.has_value();
+}
+
+inline PredictorResult Predictor::get_result_for_broadcast() const {
+    if (!broadcast_result.has_value()) {
+        throw std::runtime_error("No prediction result available for broadcast");
+    }
+    return broadcast_result.value();
 }
 
 inline void Predictor::set_instruction(PredictorInstruction instruction) {
-  this->instruction = instruction;
-  cycle_remaining = 1;
+    current_instruction = instruction;
+    busy = true;
+}
+
+inline bool Predictor::predict() const {
+    return state == State::STRONG_TAKEN || state == State::WEAK_TAKEN;
 }
 
 inline void Predictor::tick() {
-  if (cycle_remaining == 1) {
-    cycle_remaining = 0;
-  }
+    broadcast_result = next_broadcast_result;
+    
+    if (current_instruction.has_value()) {
+        PredictorResult new_result;
+        new_result.prediction = predict();
+        new_result.pc = current_instruction->pc;
+        
+        next_broadcast_result = new_result;
+        current_instruction = std::nullopt;
+    } else {
+        next_broadcast_result = std::nullopt;
+        busy = false;
+    }
 }
 
-#endif
+#endif // CORE_PREDICTOR_HPP
