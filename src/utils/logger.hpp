@@ -90,6 +90,27 @@ inline void debug(const std::string& message) {
     log(Level::DEBUG, message);
 }
 
+// Template specialization for string literals
+template<size_t N>
+inline void error(const char (&message)[N]) {
+    log(Level::ERROR, std::string(message));
+}
+
+template<size_t N>
+inline void warn(const char (&message)[N]) {
+    log(Level::WARN, std::string(message));
+}
+
+template<size_t N>
+inline void info(const char (&message)[N]) {
+    log(Level::INFO, std::string(message));
+}
+
+template<size_t N>
+inline void debug(const char (&message)[N]) {
+    log(Level::DEBUG, std::string(message));
+}
+
 template<typename T>
 inline void error(const T& message) {
     log(Level::ERROR, std::to_string(message));

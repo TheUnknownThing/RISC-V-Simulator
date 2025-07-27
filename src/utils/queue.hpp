@@ -59,7 +59,10 @@ public:
     }
 
     T& front() {
-        if (isEmpty()) return T();
+        if (isEmpty()) {
+            T empty;
+            return empty;
+        }
         return arr[frontIdx];
     }
 
@@ -70,7 +73,10 @@ public:
     }
 
     T& rear() {
-        if (isEmpty()) return T();
+        if (isEmpty()) {
+            T empty;
+            return empty;
+        }
         return arr[rearIdx];
     }
 
