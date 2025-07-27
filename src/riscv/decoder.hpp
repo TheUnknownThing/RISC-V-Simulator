@@ -11,7 +11,7 @@ inline int32_t sign_extend(uint32_t value, int bits) {
   return (value & sign_bit) ? (value | ~((1U << bits) - 1)) : value;
 }
 
-DecodedInstruction decode(uint32_t instruction) {
+inline DecodedInstruction decode(uint32_t instruction) {
   uint32_t opcode = instruction & 0x7F;
   uint32_t rd = (instruction >> 7) & 0x1F;
   uint32_t funct3 = (instruction >> 12) & 0x7;

@@ -48,6 +48,7 @@ class LSB {
   std::optional<MemoryResult> broadcast_result;
   std::optional<MemoryResult> next_broadcast_result;
   Memory memory;
+  bool busy;
 
 public:
   LSB();
@@ -60,6 +61,8 @@ public:
   MemoryResult get_result_for_broadcast() const;
 
   void commit_memory(uint32_t rob_id);
+
+  bool is_available() const;
 
 private:
   bool can_execute_load(const LSBEntry &entry) const;
@@ -79,7 +82,8 @@ inline void Memory::write(uint32_t address, int32_t data) {
 
 // LSB implementation
 inline LSB::LSB()
-    : broadcast_result(std::nullopt), next_broadcast_result(std::nullopt) {}
+    : broadcast_result(std::nullopt), next_broadcast_result(std::nullopt),
+      busy(false) {}
 
 constexpr size_t LSB_SIZE = 16;
 
@@ -90,7 +94,10 @@ inline void LSB::add_instruction(LSBInstruction instruction) {
     throw std::runtime_error("LSB is full");
   }
   lsb_queue.emplace(instruction);
+  busy = true;
 }
+
+inline bool LSB::is_available() const { return !busy; }
 
 inline bool LSB::has_result_for_broadcast() const {
   return broadcast_result.has_value();
@@ -124,6 +131,7 @@ inline void LSB::commit_memory(uint32_t rob_id) {
   }
 
   lsb_queue = temp_queue;
+  busy = false;
 }
 
 inline bool LSB::has_dependency(uint32_t address, uint32_t rob_id) const {

@@ -7,7 +7,7 @@
 #include "../utils/binary_loader.hpp"
 #include "../utils/logger.hpp"
 #include "alu.hpp"
-#include "lsb.hpp"
+#include "memory.hpp"
 #include "predictor.hpp"
 #include "register_file.hpp"
 
@@ -17,24 +17,33 @@ class CPU {
   ReservationStation rs;
   BinaryLoader loader;
   ALU alu;
-  Memory mem;
+  LSB mem;
   Predictor pred;
   uint32_t pc;
 
 public:
   CPU(std::string filename);
-  void Tick();
-
+  int run();
 private:
   riscv::DecodedInstruction fetch();
   void issue(riscv::DecodedInstruction instr);
   void execute();
   void broadcast();
   void commit();
+  void Tick();
 };
 
 inline CPU::CPU(std::string filename)
-    : reg_file(), rs(reg_file), rob(reg_file, alu, pred, mem, rs), loader(filename), pc(0) {}
+    : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file), loader(filename), pc(0) {}
+
+inline int CPU::run() {
+  while (true) {
+    Tick();
+    if (pc == 0) { // NEED TO MODIFY THE EXIT CONDITION
+      return 0;
+    }
+  }
+}
 
 inline void CPU::Tick() {
   riscv::DecodedInstruction instr = fetch();
@@ -120,7 +129,12 @@ inline void CPU::execute() {
       if (std::holds_alternative<riscv::I_LoadOp>(i_instr->op)) {
         // Load -> Memory unit
         if (mem.is_available()) {
-          mem.execute(ent);
+          LSBInstruction instruction;
+          instruction.op_type = LSBOpType::LOAD;
+          instruction.address = ent.vj;
+          instruction.dest_tag = ent.dest_tag;
+          instruction.rob_id = ent.dest_tag;
+          mem.add_instruction(instruction);
           dispatched = true;
         }
       } else if (std::holds_alternative<riscv::I_ArithmeticOp>(i_instr->op)) {
@@ -137,20 +151,40 @@ inline void CPU::execute() {
       } else if (std::holds_alternative<riscv::I_JumpOp>(i_instr->op)) {
         // Jump -> Predictor
         if (pred.is_available()) {
-          pred.execute(ent);
+          PredictorInstruction instruction;
+          instruction.pc = pc;
+          instruction.rs1 = ent.vj;
+          instruction.rs2 = ent.vk;
+          instruction.dest_tag = ent.dest_tag;
+          instruction.imm = ent.imm;
+          instruction.branch_type = std::get<riscv::I_JumpOp>(i_instr->op);
+          pred.set_instruction(instruction);
           dispatched = true;
         }
       }
     } else if (std::holds_alternative<riscv::S_Instruction>(ent.op)) {
       // Store -> Memory unit
       if (mem.is_available()) {
-        mem.execute(ent);
+        LSBInstruction instruction;
+        instruction.op_type = LSBOpType::STORE;
+        instruction.address = ent.vj;
+        instruction.data = ent.vk;
+        instruction.dest_tag = ent.dest_tag;
+        instruction.rob_id = ent.dest_tag;
+        mem.add_instruction(instruction);
         dispatched = true;
       }
     } else if (std::holds_alternative<riscv::B_Instruction>(ent.op)) {
       // Branch -> Predictor
       if (pred.is_available()) {
-        pred.execute(ent);
+        PredictorInstruction instruction;
+        instruction.pc = pc;
+        instruction.rs1 = ent.vj;
+        instruction.rs2 = ent.vk;
+        instruction.dest_tag = ent.dest_tag;
+        instruction.imm = ent.imm;
+        instruction.branch_type = std::get<riscv::B_Instruction>(ent.op).op;
+        pred.set_instruction(instruction);
         dispatched = true;
       }
     } else if (std::holds_alternative<riscv::U_Instruction>(ent.op)) {
@@ -168,8 +202,12 @@ inline void CPU::execute() {
       // Jump -> Predictor
       if (pred.is_available()) {
         PredictorInstruction instruction;
-        // instruction.pc = ent.pc;
-        // BUGGY! Need fix.
+        instruction.pc = pc;
+        instruction.rs1 = ent.vj;
+        instruction.rs2 = ent.vk;
+        instruction.dest_tag = ent.dest_tag;
+        instruction.imm = ent.imm;
+        instruction.branch_type = std::get<riscv::J_Instruction>(ent.op).op;
         pred.set_instruction(instruction);
         dispatched = true;
       }

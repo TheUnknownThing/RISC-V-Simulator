@@ -6,7 +6,7 @@
 #include "reservation_station.hpp"
 #include "../utils/queue.hpp"
 #include "core/alu.hpp"
-#include "core/lsb.hpp"
+#include "core/memory.hpp"
 #include "core/predictor.hpp"
 #include <array>
 #include <cstdint>
@@ -32,11 +32,11 @@ class ReorderBuffer {
   RegisterFile &reg_file;
   ALU &alu;
   Predictor &predictor;
-  Memory &mem;
+  LSB &mem;
   ReservationStation &rs;
 
 public:
-  ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, Memory &mem, ReservationStation &rs);
+  ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, LSB &mem, ReservationStation &rs);
 
   /**
    * @brief Add an entry to the reorder buffer
@@ -49,7 +49,7 @@ public:
   void receive_broadcast();
 };
 
-inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, Memory &mem, ReservationStation &rs)
+inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, LSB &mem, ReservationStation &rs)
     : rob(32), reg_file(reg_file), alu(alu), predictor(predictor), mem(mem), rs(rs) {}
 
 inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
@@ -95,21 +95,21 @@ inline void ReorderBuffer::receive_broadcast() {
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
       if (ent.dest_tag == result.dest_tag) {
-        ent.value = result.result;
+        ent.value = result.pc;
         ent.ready = true;
-        rs.receive_broadcast(result.result, result.dest_tag);
+        rs.receive_broadcast(result.pc, result.dest_tag);
         break;
       }
     }
   }
   if (mem.has_result_for_broadcast()) {
-    MemResult result = mem.get_result_for_broadcast();
+    MemoryResult result = mem.get_result_for_broadcast();
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
       if (ent.dest_tag == result.dest_tag) {
-        ent.value = result.result;
+        ent.value = result.data;
         ent.ready = true;
-        rs.receive_broadcast(result.result, result.dest_tag);
+        rs.receive_broadcast(result.data, result.dest_tag);
         break;
        }
     }
