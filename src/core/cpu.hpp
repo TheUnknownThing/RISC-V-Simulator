@@ -6,10 +6,13 @@
 #include "../tomasulo/reservation_station.hpp"
 #include "../utils/binary_loader.hpp"
 #include "../utils/logger.hpp"
+#include "../utils/exceptions.hpp"
 #include "alu.hpp"
 #include "memory.hpp"
 #include "predictor.hpp"
 #include "register_file.hpp"
+#include <sstream>
+#include <iomanip>
 
 class CPU {
   RegisterFile reg_file;
@@ -21,6 +24,13 @@ class CPU {
   Predictor pred;
   uint32_t pc;
 
+  // Helper function for hex formatting
+  std::string to_hex(uint32_t value) const {
+    std::stringstream ss;
+    ss << "0x" << std::hex << value;
+    return ss.str();
+  }
+
 public:
   CPU(std::string filename);
   int run();
@@ -31,7 +41,7 @@ private:
   void broadcast();
   void commit();
   void Tick();
-};
+}; 
 
 inline CPU::CPU(std::string filename)
     : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file), loader(filename), pc(0) {
@@ -43,17 +53,29 @@ inline int CPU::run() {
   LOG_INFO("Starting CPU execution loop");
   int cycle_count = 0;
   
-  while (true) {
-    cycle_count++;
-    LOG_DEBUG("=== Cycle " + std::to_string(cycle_count) + " ===");
-    LOG_DEBUG("PC: 0x" + std::to_string(pc));
-    
-    Tick();
-    
-    if (pc == 0) { // NEED TO MODIFY THE EXIT CONDITION
-      LOG_INFO("CPU execution terminated after " + std::to_string(cycle_count) + " cycles");
-      return 0;
+  try {
+    while (true) {
+      cycle_count++;
+      LOG_DEBUG("=== Cycle " + std::to_string(cycle_count) + " ===");
+      LOG_DEBUG("PC: " + to_hex(pc) + " (decimal: " + std::to_string(pc) + ")");
+      
+      Tick();
+      
+      // Detect infinite loops or program termination
+      if (cycle_count > 100000) { // Safety limit
+        LOG_WARN("Cycle limit reached, terminating execution");
+        return reg_file.read(10); // Return value from a0 register
+      }
     }
+  } catch (const ProgramTerminationException& e) {
+    LOG_INFO("Program terminated normally: " + std::string(e.what()));
+    int exit_code = e.get_exit_code();
+    LOG_INFO("Final exit code: " + std::to_string(exit_code));
+    return exit_code;
+  } catch (const std::exception& e) {
+    LOG_INFO("Program terminated due to exception: " + std::string(e.what()));
+    LOG_INFO("Returning value from register a0 (x10): " + std::to_string(reg_file.read(10)));
+    return reg_file.read(10); // Return value from a0 register
   }
 }
 
@@ -75,7 +97,7 @@ inline void CPU::Tick() {
 }
 
 inline riscv::DecodedInstruction CPU::fetch() {
-  LOG_DEBUG("Fetching instruction from PC: 0x" + std::to_string(pc));
+  LOG_DEBUG("Fetching instruction from PC: " + to_hex(pc) + " (decimal: " + std::to_string(pc) + ")");
   
   uint32_t instr = loader.fetchInstruction(pc);
   LOG_DEBUG("Raw instruction: 0x" + std::to_string(instr));
@@ -83,7 +105,7 @@ inline riscv::DecodedInstruction CPU::fetch() {
   riscv::DecodedInstruction decoded_instr = riscv::decode(instr);
   pc += 4;
   
-  LOG_DEBUG("Instruction fetched and decoded, PC updated to: 0x" + std::to_string(pc));
+  LOG_DEBUG("Instruction fetched and decoded, PC updated to: " + to_hex(pc));
   return decoded_instr;
 }
 
@@ -126,12 +148,19 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
     LOG_DEBUG("J-type instruction detected");
     rd = j_instr->rd;
     imm = j_instr->imm;
+    LOG_DEBUG("J-type immediate value: " + std::to_string(imm.value()));
   }
 
   int id = rob.add_entry(instr, rd);
 
   if (id != -1) {
     LOG_DEBUG("Added entry to ROB with ID: " + std::to_string(id));
+    
+    if (rd.has_value()) {
+      reg_file.receive_rob(rd.value(), id);
+      LOG_DEBUG("Marked register " + std::to_string(rd.value()) + " as busy with ROB ID: " + std::to_string(id));
+    }
+    
     rs.add_entry(instr, rs1, rs2, imm, id);
     LOG_DEBUG("Added entry to Reservation Station");
   } else {
@@ -206,12 +235,13 @@ inline void CPU::execute() {
         if (pred.is_available()) {
           LOG_DEBUG("Dispatching I-type jump instruction to predictor (tag=" + std::to_string(ent.dest_tag) + ")");
           PredictorInstruction instruction;
-          instruction.pc = pc;
-          instruction.rs1 = ent.vj;
-          instruction.rs2 = ent.vk;
+          instruction.pc = pc - 4; // PC where this instruction was fetched from
+          instruction.rs1 = ent.vj; // This should be the value of the source register
+          instruction.rs2 = 0; // JALR doesn't use rs2
           instruction.dest_tag = ent.dest_tag;
-          instruction.imm = ent.imm;
+          instruction.imm = ent.imm; // For JALR, imm is in the ent.imm field
           instruction.branch_type = std::get<riscv::I_JumpOp>(i_instr->op);
+          LOG_DEBUG("JALR: rs1_val=" + std::to_string(instruction.rs1) + ", imm=" + std::to_string(instruction.imm));
           pred.set_instruction(instruction);
           dispatched = true;
         } else {
@@ -238,7 +268,7 @@ inline void CPU::execute() {
       if (pred.is_available()) {
         LOG_DEBUG("Dispatching B-type branch instruction to predictor (tag=" + std::to_string(ent.dest_tag) + ")");
         PredictorInstruction instruction;
-        instruction.pc = pc;
+        instruction.pc = pc - 4; // PC where this instruction was fetched from
         instruction.rs1 = ent.vj;
         instruction.rs2 = ent.vk;
         instruction.dest_tag = std::nullopt;
@@ -268,12 +298,13 @@ inline void CPU::execute() {
       if (pred.is_available()) {
         LOG_DEBUG("Dispatching J-type jump instruction to predictor (tag=" + std::to_string(ent.dest_tag) + ")");
         PredictorInstruction instruction;
-        instruction.pc = pc;
-        instruction.rs1 = ent.vj;
-        instruction.rs2 = ent.vk;
+        instruction.pc = pc - 4; // PC where this instruction was fetched from
+        instruction.rs1 = 0; // JAL doesn't use rs1
+        instruction.rs2 = 0; // JAL doesn't use rs2
         instruction.dest_tag = ent.dest_tag;
-        instruction.imm = ent.imm;
+        instruction.imm = ent.imm; // Use the immediate from the reservation station
         instruction.branch_type = std::get<riscv::J_Instruction>(ent.op).op;
+        LOG_DEBUG("JAL: pc=" + std::to_string(instruction.pc) + ", imm=" + std::to_string(instruction.imm));
         pred.set_instruction(instruction);
         dispatched = true;
       } else {
@@ -299,6 +330,37 @@ inline void CPU::execute() {
 
 inline void CPU::broadcast() {
   LOG_DEBUG("Broadcasting execution results");
+  
+  std::optional<PredictorResult> predictor_result;
+  if (pred.has_result_for_broadcast()) {
+    predictor_result = pred.get_result_for_broadcast();
+    LOG_DEBUG("Received Predictor broadcast for PC update - target=" + to_hex(predictor_result->target_pc) + 
+              " (" + std::to_string(predictor_result->target_pc) + " decimal), prediction=" + std::to_string(predictor_result->prediction) + ", mispredicted=" + std::to_string(predictor_result->is_mispredicted));
+    
+    // misprediction recovery
+    if (predictor_result->is_mispredicted) {
+      LOG_WARN("Branch misprediction detected! Flushing pipeline and correcting PC");
+      LOG_DEBUG("Correcting PC from 0x" + std::to_string(pc) + " to 0x" + std::to_string(predictor_result->correct_target));
+      
+      // Flush
+      rob.flush();
+      rs.flush();
+      
+      pc = predictor_result->correct_target;
+    } else {
+      if (predictor_result->prediction) {
+        uint32_t new_pc = predictor_result->target_pc;
+        LOG_DEBUG("Branch predicted taken, updating PC from " + to_hex(pc) + 
+                  " to " + to_hex(new_pc) + " (decimal: " + std::to_string(new_pc) + ")");
+        pc = new_pc;
+      } else {
+        LOG_DEBUG("Branch predicted not taken, keeping PC at " + to_hex(pc));
+      }
+    }
+  } else {
+    LOG_DEBUG("No predictor broadcast available");
+  }
+  
   rob.receive_broadcast();
 }
 

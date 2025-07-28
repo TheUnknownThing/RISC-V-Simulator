@@ -22,7 +22,7 @@ private:
 
 inline RegisterFile::RegisterFile() {
   registers.fill(0);
-  rob_id.fill(0);
+  rob_id.fill(std::numeric_limits<uint32_t>::max()); // All registers initially available
 }
 
 inline void RegisterFile::write(uint32_t rd, uint32_t value) {

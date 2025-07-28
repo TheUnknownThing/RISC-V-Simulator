@@ -2,10 +2,13 @@
 #define CORE_PREDICTOR_HPP
 
 #include "../riscv/instruction.hpp"
+#include "../utils/logger.hpp"
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <variant>
+#include <sstream>
+#include <iomanip>
 
 struct PredictorInstruction {
   uint32_t pc;
@@ -21,6 +24,8 @@ struct PredictorResult {
   uint32_t pc;
   std::optional<uint32_t> dest_tag;
   uint32_t target_pc; // predicted target address
+  bool is_mispredicted; // Whether this was a misprediction
+  uint32_t correct_target; // Correct target if mispredicted
 };
 
 class Predictor {
@@ -28,6 +33,13 @@ class Predictor {
   std::optional<PredictorResult> broadcast_result;
   std::optional<PredictorResult> next_broadcast_result;
   bool busy;
+
+  // Helper function for hex formatting
+  std::string to_hex(uint32_t value) const {
+    std::stringstream ss;
+    ss << "0x" << std::hex << value;
+    return ss.str();
+  }
 
 public:
   Predictor();
@@ -94,7 +106,9 @@ inline PredictorResult Predictor::get_result_for_broadcast() const {
   if (!broadcast_result.has_value()) {
     throw std::runtime_error("No prediction result available for broadcast");
   }
-  return broadcast_result.value();
+  PredictorResult result = broadcast_result.value();
+  LOG_DEBUG("Returning predictor result: target=" + to_hex(result.target_pc) + ", prediction=" + std::to_string(result.prediction));
+  return result;
 }
 
 inline void Predictor::set_instruction(PredictorInstruction instruction) {
@@ -109,26 +123,37 @@ inline bool Predictor::predict() const {
 inline bool Predictor::is_prediction_correct() const {
   if (std::holds_alternative<riscv::B_BranchOp>(current_instruction->branch_type)) {
     auto op = std::get<riscv::B_BranchOp>(current_instruction->branch_type);
+    bool should_take;
     switch (op) {
     case riscv::B_BranchOp::BEQ:
-      return (current_instruction->rs1 == current_instruction->rs2) == predict();
+      should_take = (current_instruction->rs1 == current_instruction->rs2);
+      break;
     case riscv::B_BranchOp::BNE:
-      return (current_instruction->rs1 != current_instruction->rs2) == predict();
+      should_take = (current_instruction->rs1 != current_instruction->rs2);
+      break;
     case riscv::B_BranchOp::BLT:
-      return (static_cast<int32_t>(current_instruction->rs1) <
-              static_cast<int32_t>(current_instruction->rs2)) == predict();
+      should_take = (static_cast<int32_t>(current_instruction->rs1) <
+                     static_cast<int32_t>(current_instruction->rs2));
+      break;
     case riscv::B_BranchOp::BGE:
-      return (static_cast<int32_t>(current_instruction->rs1) >=
-              static_cast<int32_t>(current_instruction->rs2)) == predict();
+      should_take = (static_cast<int32_t>(current_instruction->rs1) >=
+                     static_cast<int32_t>(current_instruction->rs2));
+      break;
     case riscv::B_BranchOp::BLTU:
-      return (static_cast<uint32_t>(current_instruction->rs1) <
-              static_cast<uint32_t>(current_instruction->rs2)) == predict();
+      should_take = (static_cast<uint32_t>(current_instruction->rs1) <
+                     static_cast<uint32_t>(current_instruction->rs2));
+      break;
     case riscv::B_BranchOp::BGEU:
-      return (static_cast<uint32_t>(current_instruction->rs1) >=
-              static_cast<uint32_t>(current_instruction->rs2)) == predict();
+      should_take = (static_cast<uint32_t>(current_instruction->rs1) >=
+                     static_cast<uint32_t>(current_instruction->rs2));
+      break;
     default:
       throw std::runtime_error("Invalid branch operation type");
     }
+    LOG_DEBUG("Branch evaluation: rs1=" + std::to_string(current_instruction->rs1) + 
+              ", rs2=" + std::to_string(current_instruction->rs2) + 
+              ", should_take=" + std::to_string(should_take));
+    return should_take;
   }
   return false;
 }
@@ -144,38 +169,56 @@ inline uint32_t
 Predictor::calculate_target_pc(const PredictorInstruction &instr) const {
   if (std::holds_alternative<riscv::B_BranchOp>(instr.branch_type) ||
       std::holds_alternative<riscv::J_Op>(instr.branch_type)) {
-    return instr.pc + instr.imm;
+    uint32_t target = instr.pc + instr.imm;
+    LOG_DEBUG("Branch/JAL target calculation: " + to_hex(instr.pc) + " + " + 
+              std::to_string(instr.imm) + " = " + to_hex(target));
+    return target;
   } else if (std::holds_alternative<riscv::I_JumpOp>(instr.branch_type)) {
-    return (instr.rs1 + instr.imm) & ~1;
+    uint32_t target = (instr.rs1 + instr.imm) & ~1U;
+    LOG_DEBUG("JALR target calculation: (" + std::to_string(instr.rs1) + " + " + 
+              std::to_string(instr.imm) + ") & ~1 = " + to_hex(target));
+    return target;
   }
   return instr.pc + 4;
 }
 
 inline void Predictor::tick() {
   broadcast_result = next_broadcast_result;
+  next_broadcast_result = std::nullopt;
 
   if (current_instruction.has_value()) {
     PredictorResult new_result;
-    if (current_instruction->dest_tag.has_value()) {
-      new_result.dest_tag = current_instruction->dest_tag.value();
-    } else {
-      new_result.dest_tag = std::nullopt;
-    }
-    
     new_result.dest_tag = current_instruction->dest_tag;
+    new_result.pc = current_instruction->pc;
+    new_result.target_pc = calculate_target_pc(*current_instruction);
+    new_result.is_mispredicted = false;
+    new_result.correct_target = new_result.target_pc;
 
     // JAL and JALR are always taken
     if (is_unconditional_jump(current_instruction->branch_type)) {
       new_result.prediction = true;
     } else {
       new_result.prediction = predict();
+      bool actual_taken = is_prediction_correct();
+      
+      if (new_result.prediction != actual_taken) {
+        new_result.is_mispredicted = true;
+        new_result.correct_target = actual_taken ? new_result.target_pc : (new_result.pc + 4);
+        LOG_DEBUG("Branch misprediction detected! Predicted: " + 
+                  std::to_string(new_result.prediction) + ", Actual: " + std::to_string(actual_taken));
+      }
+      
+      update(actual_taken);
     }
-
-    new_result.pc = current_instruction->pc;
-    new_result.target_pc = calculate_target_pc(*current_instruction);
+    
+    LOG_DEBUG("Predictor calculating: PC=" + to_hex(current_instruction->pc) + 
+              ", imm=" + std::to_string(current_instruction->imm) + 
+              ", target=" + to_hex(new_result.target_pc) +
+              ", mispredicted=" + std::to_string(new_result.is_mispredicted));
 
     next_broadcast_result = new_result;
     current_instruction = std::nullopt;
+    busy = false;
   } else {
     next_broadcast_result = std::nullopt;
     busy = false;

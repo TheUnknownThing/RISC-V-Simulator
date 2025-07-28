@@ -6,6 +6,7 @@
 #include "reservation_station.hpp"
 #include "../utils/queue.hpp"
 #include "../utils/logger.hpp"
+#include "../utils/exceptions.hpp"
 #include "core/alu.hpp"
 #include "core/memory.hpp"
 #include "core/predictor.hpp"
@@ -48,6 +49,7 @@ public:
   int add_entry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_tag);
   void commit();
   void receive_broadcast();
+  void flush();
 };
 
 inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, LSB &mem, ReservationStation &rs)
@@ -77,6 +79,31 @@ inline void ReorderBuffer::commit() {
   const auto &ent = rob.front();
   if (ent.ready) {
     LOG_DEBUG("Committing instruction with ROB ID: " + std::to_string(ent.id));
+    
+    // termination instruction: li a0, 255
+    if (auto *i_instr = std::get_if<riscv::I_Instruction>(&ent.instr)) {
+      if (std::holds_alternative<riscv::I_ArithmeticOp>(i_instr->op) &&
+          std::get<riscv::I_ArithmeticOp>(i_instr->op) == riscv::I_ArithmeticOp::ADDI &&
+          i_instr->rd == 10 &&
+          i_instr->rs1 == 0 &&
+          i_instr->imm == 255) {
+        LOG_INFO("Termination instruction detected: li a0, 255");
+        LOG_INFO("Program terminating with exit code: " + std::to_string(static_cast<int>(ent.value)));
+        
+        // Commit the instruction first before terminating
+        if (ent.dest_tag.has_value()) {
+          LOG_DEBUG("Writing termination value " + std::to_string(ent.value) + " to register " + std::to_string(ent.dest_tag.value()));
+          reg_file.write(ent.dest_tag.value(), ent.value);
+          if (reg_file.get_rob(ent.dest_tag.value()) == ent.id) {
+            reg_file.mark_available(ent.dest_tag.value());
+          }
+        }
+        
+        // Throw termination exception with the value in a0
+        throw ProgramTerminationException(static_cast<int>(ent.value));
+      }
+    }
+    
     // commit the instruction
     if (ent.dest_tag.has_value()) {
       LOG_DEBUG("Writing value " + std::to_string(ent.value) + " to register " + std::to_string(ent.dest_tag.value()));
@@ -104,7 +131,7 @@ inline void ReorderBuffer::receive_broadcast() {
               ", result: " + std::to_string(result.result));
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
-      if (ent.dest_tag == result.dest_tag) {
+      if (ent.id == result.dest_tag) {
         ent.value = result.result;
         ent.ready = true;
         rs.receive_broadcast(result.result, result.dest_tag);
@@ -119,14 +146,10 @@ inline void ReorderBuffer::receive_broadcast() {
     LOG_DEBUG("Received Predictor broadcast, PC: " + std::to_string(result.pc));
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
-      if (ent.dest_tag == result.dest_tag) {
+      if (result.dest_tag.has_value() && ent.id == result.dest_tag.value()) {
         ent.value = result.pc;
         ent.ready = true;
-        if (result.dest_tag.has_value()) {
-          rs.receive_broadcast(result.pc, result.dest_tag.value());
-        } else {
-          LOG_DEBUG("No destination tag for Predictor result, skipping broadcast");
-        }
+        rs.receive_broadcast(result.pc, result.dest_tag.value());
         LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) + " with Predictor result");
         broadcasts_received++;
         break;
@@ -139,7 +162,7 @@ inline void ReorderBuffer::receive_broadcast() {
               ", data: " + std::to_string(result.data));
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
-      if (ent.dest_tag == result.dest_tag) {
+      if (ent.id == result.dest_tag) {
         ent.value = result.data;
         ent.ready = true;
         rs.receive_broadcast(result.data, result.dest_tag);
@@ -153,6 +176,25 @@ inline void ReorderBuffer::receive_broadcast() {
   if (broadcasts_received > 0) {
     LOG_DEBUG("Processed " + std::to_string(broadcasts_received) + " broadcasts this cycle");
   }
+}
+
+inline void ReorderBuffer::flush() {
+  LOG_DEBUG("Flushing ROB - clearing all entries");
+  
+  while (!rob.isEmpty()) {
+    const auto& ent = rob.front();
+    if (ent.dest_tag.has_value()) {
+      if (reg_file.get_rob(ent.dest_tag.value()) == ent.id) {
+        reg_file.mark_available(ent.dest_tag.value());
+        LOG_DEBUG("Cleared register dependency for reg" + std::to_string(ent.dest_tag.value()));
+      }
+    }
+    rob.dequeue();
+  }
+  
+  // Reset ID counter
+  cur_id = 0;
+  LOG_DEBUG("ROB flush completed");
 }
 
 #endif // TOMASULO_REORDER_BUFFER_HPP

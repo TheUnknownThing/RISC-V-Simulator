@@ -1,6 +1,8 @@
 #ifndef UTILS_QUEUE_HPP
 #define UTILS_QUEUE_HPP
 
+#include <stdexcept>
+
 template <typename T>
 class CircularQueue {
 private:
@@ -60,8 +62,7 @@ public:
 
     T& front() {
         if (isEmpty()) {
-            T empty;
-            return empty;
+            throw std::runtime_error("CircularQueue::front() called on empty queue");
         }
         return arr[frontIdx];
     }
@@ -74,8 +75,7 @@ public:
 
     T& rear() {
         if (isEmpty()) {
-            T empty;
-            return empty;
+            throw std::runtime_error("CircularQueue::rear() called on empty queue");
         }
         return arr[rearIdx];
     }

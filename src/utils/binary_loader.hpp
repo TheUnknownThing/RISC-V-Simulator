@@ -30,7 +30,9 @@ public:
    * in memory.
    */
   uint32_t fetchInstruction(uint32_t address) const {
-    LOG_DEBUG("Fetching instruction from memory address: 0x" + std::to_string(address));
+    std::stringstream ss;
+    ss << "0x" << std::hex << address;
+    LOG_DEBUG("Fetching instruction from memory address: " + ss.str() + " (decimal: " + std::to_string(address) + ")");
     try {
       uint32_t byte0 = memory.at(address);
       uint32_t byte1 = memory.at(address + 1);

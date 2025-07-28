@@ -28,6 +28,7 @@ public:
   ReservationStation(RegisterFile &reg_file);
   void add_entry(const riscv::DecodedInstruction &op, std::optional<uint32_t> qj, std::optional<uint32_t> qk, std::optional<uint32_t> imm, int dest_tag);
   void receive_broadcast(int32_t value, uint32_t dest_tag);
+  void flush();
 };
 
 inline ReservationStation::ReservationStation(RegisterFile &reg_file) : reg_file(reg_file), rs(32) {
@@ -107,6 +108,16 @@ inline void ReservationStation::receive_broadcast(int32_t value, uint32_t dest_t
   }
   
   LOG_DEBUG("Broadcast updated " + std::to_string(updated_entries) + " reservation station entries");
+}
+
+inline void ReservationStation::flush() {
+  LOG_DEBUG("Flushing Reservation Station - clearing all entries");
+  
+  while (!rs.isEmpty()) {
+    rs.dequeue();
+  }
+  
+  LOG_DEBUG("Reservation Station flush completed");
 }
 
 #endif // TOMASULO_RESERVATION_STATION_HPP
