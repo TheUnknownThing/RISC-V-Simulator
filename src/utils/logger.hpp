@@ -6,18 +6,6 @@
 #include <chrono>
 #include <iomanip>
 
-#ifndef LOGGING_LEVEL_NONE
-#ifndef LOGGING_LEVEL_ERROR
-#ifndef LOGGING_LEVEL_WARN
-#ifndef LOGGING_LEVEL_INFO
-#ifndef LOGGING_LEVEL_DEBUG
-#define LOGGING_LEVEL_INFO
-#endif
-#endif
-#endif
-#endif
-#endif
-
 namespace Logger {
 
 enum class Level {

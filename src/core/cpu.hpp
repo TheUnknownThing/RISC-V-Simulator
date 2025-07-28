@@ -241,7 +241,7 @@ inline void CPU::execute() {
         instruction.pc = pc;
         instruction.rs1 = ent.vj;
         instruction.rs2 = ent.vk;
-        instruction.dest_tag = ent.dest_tag;
+        instruction.dest_tag = std::nullopt;
         instruction.imm = ent.imm;
         instruction.branch_type = std::get<riscv::B_Instruction>(ent.op).op;
         pred.set_instruction(instruction);

@@ -1,3 +1,5 @@
+#define LOGGING_LEVEL_DEBUG
+
 #include <iostream>
 #include "core/cpu.hpp"
 #include "utils/logger.hpp"

@@ -11,7 +11,7 @@ struct PredictorInstruction {
   uint32_t pc;
   uint32_t rs1;
   uint32_t rs2;
-  uint32_t dest_tag;
+  std::optional<uint32_t> dest_tag;
   int32_t imm;
   std::variant<riscv::I_JumpOp, riscv::J_Op, riscv::B_BranchOp> branch_type;
 };
@@ -19,7 +19,7 @@ struct PredictorInstruction {
 struct PredictorResult {
   bool prediction;
   uint32_t pc;
-  uint32_t dest_tag;
+  std::optional<uint32_t> dest_tag;
   uint32_t target_pc; // predicted target address
 };
 
@@ -37,6 +37,7 @@ public:
   bool has_result_for_broadcast() const;
   PredictorResult get_result_for_broadcast() const;
   void tick();
+  bool is_prediction_correct() const;
 
 private:
   enum class State {
@@ -105,6 +106,33 @@ inline bool Predictor::predict() const {
   return state == State::STRONG_TAKEN || state == State::WEAK_TAKEN;
 }
 
+inline bool Predictor::is_prediction_correct() const {
+  if (std::holds_alternative<riscv::B_BranchOp>(current_instruction->branch_type)) {
+    auto op = std::get<riscv::B_BranchOp>(current_instruction->branch_type);
+    switch (op) {
+    case riscv::B_BranchOp::BEQ:
+      return (current_instruction->rs1 == current_instruction->rs2) == predict();
+    case riscv::B_BranchOp::BNE:
+      return (current_instruction->rs1 != current_instruction->rs2) == predict();
+    case riscv::B_BranchOp::BLT:
+      return (static_cast<int32_t>(current_instruction->rs1) <
+              static_cast<int32_t>(current_instruction->rs2)) == predict();
+    case riscv::B_BranchOp::BGE:
+      return (static_cast<int32_t>(current_instruction->rs1) >=
+              static_cast<int32_t>(current_instruction->rs2)) == predict();
+    case riscv::B_BranchOp::BLTU:
+      return (static_cast<uint32_t>(current_instruction->rs1) <
+              static_cast<uint32_t>(current_instruction->rs2)) == predict();
+    case riscv::B_BranchOp::BGEU:
+      return (static_cast<uint32_t>(current_instruction->rs1) >=
+              static_cast<uint32_t>(current_instruction->rs2)) == predict();
+    default:
+      throw std::runtime_error("Invalid branch operation type");
+    }
+  }
+  return false;
+}
+
 inline bool Predictor::is_unconditional_jump(
     const std::variant<riscv::I_JumpOp, riscv::J_Op, riscv::B_BranchOp> &type)
     const {
@@ -128,6 +156,12 @@ inline void Predictor::tick() {
 
   if (current_instruction.has_value()) {
     PredictorResult new_result;
+    if (current_instruction->dest_tag.has_value()) {
+      new_result.dest_tag = current_instruction->dest_tag.value();
+    } else {
+      new_result.dest_tag = std::nullopt;
+    }
+    
     new_result.dest_tag = current_instruction->dest_tag;
 
     // JAL and JALR are always taken

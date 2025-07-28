@@ -116,14 +116,17 @@ inline void ReorderBuffer::receive_broadcast() {
   }
   if (predictor.has_result_for_broadcast()) {
     PredictorResult result = predictor.get_result_for_broadcast();
-    LOG_DEBUG("Received Predictor broadcast for tag: " + std::to_string(result.dest_tag) + 
-              ", PC: " + std::to_string(result.pc));
+    LOG_DEBUG("Received Predictor broadcast, PC: " + std::to_string(result.pc));
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
       if (ent.dest_tag == result.dest_tag) {
         ent.value = result.pc;
         ent.ready = true;
-        rs.receive_broadcast(result.pc, result.dest_tag);
+        if (result.dest_tag.has_value()) {
+          rs.receive_broadcast(result.pc, result.dest_tag.value());
+        } else {
+          LOG_DEBUG("No destination tag for Predictor result, skipping broadcast");
+        }
         LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) + " with Predictor result");
         broadcasts_received++;
         break;
