@@ -64,7 +64,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 50) {
+      if (cycle_count > 30) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }
@@ -177,7 +177,8 @@ inline void CPU::execute() {
     if (ent.qj != 0 || ent.qk != 0) {
       LOG_DEBUG("RS entry " + std::to_string(i) +
                 " waiting for operands (qj=" + std::to_string(ent.qj) +
-                ", qk=" + std::to_string(ent.qk) + ")");
+                ", qk=" + std::to_string(ent.qk) + ") with instruction: " +
+                riscv::to_string(ent.op));
       continue;
     }
 
@@ -366,16 +367,6 @@ inline void CPU::broadcast() {
       rs.flush();
 
       pc = predictor_result->correct_target;
-    } else {
-      if (predictor_result->prediction) {
-        uint32_t new_pc = predictor_result->target_pc;
-        LOG_DEBUG("Branch predicted taken, updating PC from " + to_hex(pc) +
-                  " to " + to_hex(new_pc) +
-                  " (decimal: " + std::to_string(new_pc) + ")");
-        pc = new_pc;
-      } else {
-        LOG_DEBUG("Branch predicted not taken, keeping PC at " + to_hex(pc));
-      }
     }
   } else {
     LOG_DEBUG("No predictor broadcast available");
@@ -386,6 +377,7 @@ inline void CPU::broadcast() {
 
 inline void CPU::commit() {
   LOG_DEBUG("Committing completed instructions");
+  reg_file.print_debug_info();
   rob.commit();
 }
 

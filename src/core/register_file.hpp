@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <limits>
+#include "../utils/logger.hpp"
 
 class RegisterFile {
 public:
@@ -14,6 +15,7 @@ public:
   void receive_rob(uint32_t rd, uint32_t id);
   void mark_available(uint32_t rd);
   uint32_t get_rob(uint32_t rd) const;
+  void print_debug_info() const;
 
 private:
   std::array<uint32_t, 32> registers;
@@ -42,5 +44,13 @@ inline uint32_t RegisterFile::get_rob(uint32_t rd) const {
 inline uint32_t RegisterFile::read(uint32_t rd) const { return registers[rd]; }
 
 inline void RegisterFile::flush() { registers.fill(0); }
+
+inline void RegisterFile::print_debug_info() const {
+  LOG_DEBUG("Register File Debug Info:");
+  for (size_t i = 0; i < registers.size(); ++i) {
+    LOG_DEBUG("reg[" + std::to_string(i) + "] = " + std::to_string(registers[i]) +
+              ", ROB ID: " + std::to_string(rob_id[i]));
+  }
+}
 
 #endif // CORE_REGISTER_FILE_HPP

@@ -112,46 +112,35 @@ inline MemoryResult LSB::get_result_for_broadcast() const {
 
 inline void LSB::commit_memory(uint32_t rob_id) {
   std::queue<LSBEntry> temp_queue;
-
+  bool found = false;
   while (!lsb_queue.empty()) {
     LSBEntry entry = lsb_queue.front();
     lsb_queue.pop();
 
-    if (entry.instruction.rob_id == rob_id &&
+    if (!found && entry.instruction.rob_id == rob_id &&
         entry.instruction.op_type == LSBOpType::STORE) {
       entry.committed = true;
-
-      if (!entry.executing && entry.cycles_remaining == 0) {
-        memory.write(entry.instruction.address, entry.instruction.data);
-        continue;
-      }
+      found = true;
     }
-
     temp_queue.push(entry);
   }
-
   lsb_queue = temp_queue;
-  busy = false;
 }
 
 inline bool LSB::has_dependency(uint32_t address, uint32_t rob_id) const {
   std::queue<LSBEntry> temp_queue = lsb_queue;
-
   while (!temp_queue.empty()) {
     const LSBEntry &entry = temp_queue.front();
-    temp_queue.pop();
-
     if (entry.instruction.rob_id < rob_id &&
         entry.instruction.op_type == LSBOpType::STORE &&
         entry.instruction.address == address && !entry.committed) {
       return true;
     }
-
     if (entry.instruction.rob_id >= rob_id) {
       break;
     }
+    temp_queue.pop();
   }
-
   return false;
 }
 
@@ -159,7 +148,6 @@ inline bool LSB::can_execute_load(const LSBEntry &entry) const {
   if (entry.instruction.op_type != LSBOpType::LOAD) {
     return false;
   }
-
   return !has_dependency(entry.instruction.address, entry.instruction.rob_id);
 }
 
@@ -167,18 +155,19 @@ inline void LSB::execute_head() {
   if (lsb_queue.empty()) {
     return;
   }
-
   LSBEntry &head = lsb_queue.front();
-
-  bool can_execute = false;
-
-  if (head.instruction.op_type == LSBOpType::LOAD) {
-    can_execute = can_execute_load(head);
-  } else {                        // STORE
-    can_execute = head.committed; // Store can only execute after commitment
+  if (head.executing) {
+    return;
   }
 
-  if (can_execute && !head.executing) {
+  bool can_execute = false;
+  if (head.instruction.op_type == LSBOpType::LOAD) {
+    can_execute = can_execute_load(head);
+  } else { 
+    can_execute = head.committed;
+  }
+
+  if (can_execute) {
     head.executing = true;
     head.cycles_remaining = 3;
   }
@@ -192,7 +181,6 @@ inline void LSB::tick() {
 
   if (!lsb_queue.empty()) {
     std::queue<LSBEntry> temp_queue;
-
     while (!lsb_queue.empty()) {
       LSBEntry entry = lsb_queue.front();
       lsb_queue.pop();
@@ -208,28 +196,21 @@ inline void LSB::tick() {
           if (entry.instruction.op_type == LSBOpType::LOAD) {
             result.data = memory.read(entry.instruction.address);
             result.dest_tag = entry.instruction.dest_tag;
-
             next_broadcast_result = result;
-
-            continue;
-
           } else { // STORE
             memory.write(entry.instruction.address, entry.instruction.data);
-            result.data = 0;
-            result.dest_tag = 0;
-
+            result.data = 0; // No data to broadcast
+            result.dest_tag = 0; // No destination register
             next_broadcast_result = result;
-
-            continue;
           }
+          continue;
         }
       }
-
       temp_queue.push(entry);
     }
-
     lsb_queue = temp_queue;
   }
+  busy = !lsb_queue.empty();
 }
 
 #endif // CORE_MEMORY_HPP

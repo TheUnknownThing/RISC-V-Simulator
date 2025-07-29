@@ -7,9 +7,9 @@
 #include "../utils/queue.hpp"
 #include "../utils/logger.hpp"
 #include "../utils/exceptions.hpp"
-#include "core/alu.hpp"
-#include "core/memory.hpp"
-#include "core/predictor.hpp"
+#include "../core/alu.hpp"
+#include "../core/memory.hpp"
+#include "../core/predictor.hpp"
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -40,12 +40,6 @@ class ReorderBuffer {
 public:
   ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor, LSB &mem, ReservationStation &rs);
 
-  /**
-   * @brief Add an entry to the reorder buffer
-   * @param instr The instruction to add
-   * @param dest_tag The destination register
-   * @return The ID of the entry
-   */
   int add_entry(riscv::DecodedInstruction instr, std::optional<uint32_t> dest_tag);
   void commit();
   void receive_broadcast();
@@ -77,7 +71,10 @@ inline void ReorderBuffer::commit() {
   }
   
   const auto &ent = rob.front();
-  if (ent.ready) {
+  
+  bool is_store = std::holds_alternative<riscv::S_Instruction>(ent.instr);
+
+  if (ent.ready || is_store) {
     LOG_DEBUG("Committing instruction with ROB ID: " + std::to_string(ent.id));
     
     // termination instruction: li a0, 255
@@ -90,7 +87,6 @@ inline void ReorderBuffer::commit() {
         LOG_INFO("Termination instruction detected: li a0, 255");
         LOG_INFO("Program terminating with exit code: " + std::to_string(static_cast<int>(ent.value)));
         
-        // Commit the instruction first before terminating
         if (ent.dest_tag.has_value()) {
           LOG_DEBUG("Writing termination value " + std::to_string(ent.value) + " to register " + std::to_string(ent.dest_tag.value()));
           reg_file.write(ent.dest_tag.value(), ent.value);
@@ -99,12 +95,15 @@ inline void ReorderBuffer::commit() {
           }
         }
         
-        // Throw termination exception with the value in a0
         throw ProgramTerminationException(static_cast<int>(ent.value));
       }
     }
     
-    // commit the instruction
+    if (is_store) {
+      mem.commit_memory(ent.id);
+      LOG_DEBUG("Signaled LSB to execute STORE for ROB ID: " + std::to_string(ent.id));
+    }
+    
     if (ent.dest_tag.has_value()) {
       LOG_DEBUG("Writing value " + std::to_string(ent.value) + " to register " + std::to_string(ent.dest_tag.value()));
       reg_file.write(ent.dest_tag.value(), ent.value);
@@ -138,7 +137,6 @@ inline void ReorderBuffer::receive_broadcast() {
         rs.receive_broadcast(result.result, result.dest_tag);
         LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) + " with ALU result");
         broadcasts_received++;
-        break;
       }
     }
   }
@@ -153,24 +151,26 @@ inline void ReorderBuffer::receive_broadcast() {
         rs.receive_broadcast(result.pc, result.dest_tag.value());
         LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) + " with Predictor result");
         broadcasts_received++;
-        break;
       }
     }
   }
   if (mem.has_result_for_broadcast()) {
     MemoryResult result = mem.get_result_for_broadcast();
-    LOG_DEBUG("Received Memory broadcast for tag: " + std::to_string(result.dest_tag) + 
-              ", data: " + std::to_string(result.data));
-    for (int i = 0; i < rob.size(); i++) {
-      ReorderBufferEntry &ent = rob.get(i);
-      if (ent.id == result.dest_tag) {
-        ent.value = result.data;
-        ent.ready = true;
-        rs.receive_broadcast(result.data, result.dest_tag);
-        LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) + " with Memory result");
-        broadcasts_received++;
-        break;
-       }
+    // Only LOAD operations update the ROB. A STORE completion broadcast is informational
+    // and arrives after the instruction has already been committed and removed from the ROB.
+    if (result.op_type == LSBOpType::LOAD) {
+        LOG_DEBUG("Received Memory broadcast for tag: " + std::to_string(result.dest_tag) + 
+                  ", data: " + std::to_string(result.data));
+        for (int i = 0; i < rob.size(); i++) {
+          ReorderBufferEntry &ent = rob.get(i);
+          if (ent.id == result.dest_tag) {
+            ent.value = result.data;
+            ent.ready = true;
+            rs.receive_broadcast(result.data, result.dest_tag);
+            LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) + " with Memory result");
+            broadcasts_received++;
+           }
+        }
     }
   }
   
