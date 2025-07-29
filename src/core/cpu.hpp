@@ -56,12 +56,12 @@ inline int CPU::run() {
   try {
     while (true) {
       cycle_count++;
-      LOG_DEBUG("=== Cycle " + std::to_string(cycle_count) + " ===");
+      LOG_DEBUG("======================= Cycle " + std::to_string(cycle_count) + " =======================");
       LOG_DEBUG("PC: " + to_hex(pc) + " (decimal: " + std::to_string(pc) + ")");
       
       Tick();
       
-      if (cycle_count > 100000) {
+      if (cycle_count > 50) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }

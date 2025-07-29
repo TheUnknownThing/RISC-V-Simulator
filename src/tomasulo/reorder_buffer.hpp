@@ -116,7 +116,8 @@ inline void ReorderBuffer::commit() {
     rob.dequeue();
     LOG_DEBUG("Instruction committed and removed from ROB");
   } else {
-    LOG_DEBUG("Head instruction not ready for commit (ROB ID: " + std::to_string(ent.id) + ")");
+    LOG_DEBUG("Head instruction not ready for commit (ROB ID: " + std::to_string(ent.id) + "), instruction details: " + 
+              riscv::to_string(ent.instr));
   }
 }
 
