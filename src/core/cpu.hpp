@@ -61,8 +61,7 @@ inline int CPU::run() {
       
       Tick();
       
-      // Detect infinite loops or program termination
-      if (cycle_count > 100000) { // Safety limit
+      if (cycle_count > 100000) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }
@@ -72,10 +71,6 @@ inline int CPU::run() {
     int exit_code = e.get_exit_code();
     LOG_INFO("Final exit code: " + std::to_string(exit_code));
     return exit_code;
-  } catch (const std::exception& e) {
-    LOG_INFO("Program terminated due to exception: " + std::string(e.what()));
-    LOG_INFO("Returning value from register a0 (x10): " + std::to_string(reg_file.read(10)));
-    return reg_file.read(10); // Return value from a0 register
   }
 }
 
@@ -244,6 +239,7 @@ inline void CPU::execute() {
           LOG_DEBUG("JALR: rs1_val=" + std::to_string(instruction.rs1) + ", imm=" + std::to_string(instruction.imm));
           pred.set_instruction(instruction);
           dispatched = true;
+          pc = pred.calculate_target_pc();
         } else {
           LOG_DEBUG("Predictor busy, cannot dispatch jump instruction");
         }
@@ -276,6 +272,7 @@ inline void CPU::execute() {
         instruction.branch_type = std::get<riscv::B_Instruction>(ent.op).op;
         pred.set_instruction(instruction);
         dispatched = true;
+        pc = pred.calculate_target_pc();
       } else {
         LOG_DEBUG("Predictor busy, cannot dispatch branch instruction");
       }
@@ -307,6 +304,7 @@ inline void CPU::execute() {
         LOG_DEBUG("JAL: pc=" + std::to_string(instruction.pc) + ", imm=" + std::to_string(instruction.imm));
         pred.set_instruction(instruction);
         dispatched = true;
+        pc = pred.calculate_target_pc();
       } else {
         LOG_DEBUG("Predictor busy, cannot dispatch J-type jump instruction");
       }

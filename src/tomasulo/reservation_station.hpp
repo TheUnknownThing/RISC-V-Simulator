@@ -69,8 +69,7 @@ inline void ReservationStation::add_entry(const riscv::DecodedInstruction &op, s
       vk = imm.value_or(0);
       LOG_DEBUG("Using immediate value: " + std::to_string(vk));
     }
-    
-    ReservationStationEntry ent(op, qj, qk, vj, vk, imm.value(), dest_tag);
+    ReservationStationEntry ent(op, qj, qk, vj, vk, imm.value_or(0), dest_tag);
     rs.enqueue(ent);
     LOG_DEBUG("Entry added to Reservation Station successfully");
   } else {

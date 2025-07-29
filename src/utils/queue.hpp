@@ -30,10 +30,15 @@ public:
 
     bool remove(int index) {
         if (index < 0 || index >= count) return false;
+        
         for (int i = index; i < count - 1; i++) {
-            arr[i] = arr[i + 1];
+            int currentPos = (frontIdx + i) % capacity;
+            int nextPos = (frontIdx + i + 1) % capacity;
+            arr[currentPos] = arr[nextPos];
         }
+        
         count--;
+        rearIdx = (rearIdx - 1 + capacity) % capacity;
         return true;
     }
 

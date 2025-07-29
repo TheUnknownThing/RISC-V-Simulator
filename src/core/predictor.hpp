@@ -50,6 +50,7 @@ public:
   PredictorResult get_result_for_broadcast() const;
   void tick();
   bool is_prediction_correct() const;
+  uint32_t calculate_target_pc() const;
 
 private:
   enum class State {
@@ -61,7 +62,6 @@ private:
   State state;
 
   bool predict() const;
-  uint32_t calculate_target_pc(const PredictorInstruction &instr) const;
   bool is_unconditional_jump(const std::variant<riscv::I_JumpOp, riscv::J_Op,
                                                 riscv::B_BranchOp> &type) const;
 };
@@ -166,20 +166,20 @@ inline bool Predictor::is_unconditional_jump(
 }
 
 inline uint32_t
-Predictor::calculate_target_pc(const PredictorInstruction &instr) const {
-  if (std::holds_alternative<riscv::B_BranchOp>(instr.branch_type) ||
-      std::holds_alternative<riscv::J_Op>(instr.branch_type)) {
-    uint32_t target = instr.pc + instr.imm;
-    LOG_DEBUG("Branch/JAL target calculation: " + to_hex(instr.pc) + " + " + 
-              std::to_string(instr.imm) + " = " + to_hex(target));
+Predictor::calculate_target_pc() const {
+  if (std::holds_alternative<riscv::B_BranchOp>(current_instruction->branch_type) ||
+      std::holds_alternative<riscv::J_Op>(current_instruction->branch_type)) {
+    uint32_t target = current_instruction->pc + current_instruction->imm;
+    LOG_DEBUG("Branch/JAL target calculation: " + to_hex(current_instruction->pc) + " + " + 
+              std::to_string(current_instruction->imm) + " = " + to_hex(target));
     return target;
-  } else if (std::holds_alternative<riscv::I_JumpOp>(instr.branch_type)) {
-    uint32_t target = (instr.rs1 + instr.imm) & ~1U;
-    LOG_DEBUG("JALR target calculation: (" + std::to_string(instr.rs1) + " + " + 
-              std::to_string(instr.imm) + ") & ~1 = " + to_hex(target));
+  } else if (std::holds_alternative<riscv::I_JumpOp>(current_instruction->branch_type)) {
+    uint32_t target = (current_instruction->rs1 + current_instruction->imm) & ~1U;
+    LOG_DEBUG("JALR target calculation: (" + std::to_string(current_instruction->rs1) + " + " + 
+              std::to_string(current_instruction->imm) + ") & ~1 = " + to_hex(target));
     return target;
   }
-  return instr.pc + 4;
+  return current_instruction->pc + 4;
 }
 
 inline void Predictor::tick() {
@@ -190,7 +190,7 @@ inline void Predictor::tick() {
     PredictorResult new_result;
     new_result.dest_tag = current_instruction->dest_tag;
     new_result.pc = current_instruction->pc;
-    new_result.target_pc = calculate_target_pc(*current_instruction);
+    new_result.target_pc = calculate_target_pc();
     new_result.is_mispredicted = false;
     new_result.correct_target = new_result.target_pc;
 
