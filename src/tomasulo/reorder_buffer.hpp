@@ -49,7 +49,7 @@ public:
 
   int add_entry(riscv::DecodedInstruction instr,
                 std::optional<uint32_t> dest_tag);
-  void commit();
+  void commit(uint32_t &pc);
   void receive_broadcast();
   void flush();
   std::optional<int32_t> get_value(std::optional<uint32_t> rob_id);
@@ -79,7 +79,7 @@ inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
   return -1;
 }
 
-inline void ReorderBuffer::commit() {
+inline void ReorderBuffer::commit(uint32_t &pc) {
   if (rob.isEmpty()) {
     LOG_DEBUG("ROB is empty, nothing to commit");
     return;
@@ -97,24 +97,51 @@ inline void ReorderBuffer::commit() {
     // termination instruction: li a0, 255
     if (auto *i_instr = std::get_if<riscv::I_Instruction>(&ent.instr)) {
       if (std::holds_alternative<riscv::I_ArithmeticOp>(i_instr->op) &&
-        std::get<riscv::I_ArithmeticOp>(i_instr->op) ==
-          riscv::I_ArithmeticOp::ADDI &&
-        i_instr->rd == 10 && i_instr->rs1 == 0 && i_instr->imm == 255) {
-      LOG_INFO("Termination instruction detected: li a0, 255");
-      
-      // Get the original value of a0 before termination
-      double original_a0_value = reg_file.read(10);
-      LOG_INFO("Program terminating with exit code: " +
-           std::to_string(static_cast<int>(original_a0_value)));
+          std::get<riscv::I_ArithmeticOp>(i_instr->op) ==
+              riscv::I_ArithmeticOp::ADDI &&
+          i_instr->rd == 10 && i_instr->rs1 == 0 && i_instr->imm == 255) {
+        LOG_INFO("Termination instruction detected: li a0, 255");
 
-      // Do not write to register a0, just mark it as available if needed
-      if (ent.dest_tag.has_value() && reg_file.get_rob(ent.dest_tag.value()) == ent.id) {
-        reg_file.mark_available(ent.dest_tag.value());
-        LOG_DEBUG("Marked register " + std::to_string(ent.dest_tag.value()) +
-            " as available without overwriting its value");
+        // Get the original value of a0 before termination
+        double original_a0_value = reg_file.read(10);
+        LOG_INFO("Program terminating with exit code: " +
+                 std::to_string(static_cast<int>(original_a0_value)));
+
+        // Do not write to register a0, just mark it as available if needed
+        if (ent.dest_tag.has_value() &&
+            reg_file.get_rob(ent.dest_tag.value()) == ent.id) {
+          reg_file.mark_available(ent.dest_tag.value());
+          LOG_DEBUG("Marked register " + std::to_string(ent.dest_tag.value()) +
+                    " as available without overwriting its value");
+        }
+
+        throw ProgramTerminationException(static_cast<int>(original_a0_value));
       }
 
-      throw ProgramTerminationException(static_cast<int>(original_a0_value));
+      std::optional<PredictorResult> predictor_result;
+      if (predictor.has_result_for_broadcast()) {
+        predictor_result = predictor.get_result_for_broadcast();
+        LOG_DEBUG("Received Predictor broadcast for PC update - target=" +
+                  std::to_string(predictor_result->target_pc) + " (" +
+                  std::to_string(predictor_result->target_pc) +
+                  " decimal), prediction=" +
+                  std::to_string(predictor_result->prediction) +
+                  ", mispredicted=" +
+                  std::to_string(predictor_result->is_mispredicted));
+
+        // misprediction recovery
+        if (predictor_result->is_mispredicted) {
+          LOG_WARN("Branch misprediction detected! Flushing pipeline and "
+                   "correcting PC");
+
+          // Flush
+          flush();
+          rs.flush();
+
+          pc = predictor_result->correct_target;
+        }
+      } else {
+        LOG_DEBUG("No predictor broadcast available");
       }
     }
 
@@ -225,7 +252,8 @@ inline void ReorderBuffer::flush() {
   LOG_DEBUG("ROB flush completed");
 }
 
-inline std::optional<int32_t> ReorderBuffer::get_value(std::optional<uint32_t> rob_id) {
+inline std::optional<int32_t>
+ReorderBuffer::get_value(std::optional<uint32_t> rob_id) {
   if (!rob_id.has_value()) {
     LOG_DEBUG("No rob_id provided, returning nullopt");
     return std::nullopt;
@@ -252,9 +280,8 @@ void ReorderBuffer::print_debug_info() {
   LOG_DEBUG("Reorder Buffer Debug Info:");
   for (int i = 0; i < rob.size(); i++) {
     const auto &ent = rob.get(i);
-    LOG_DEBUG("  Entry " + std::to_string(i) + ": " +
-              "ID: " + std::to_string(ent.id) +
-              ", Value: " + std::to_string(ent.value) +
+    LOG_DEBUG("  Entry " + std::to_string(i) + ": " + "ID: " +
+              std::to_string(ent.id) + ", Value: " + std::to_string(ent.value) +
               ", Ready: " + (ent.ready ? "true" : "false"));
   }
 }

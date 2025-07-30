@@ -1,6 +1,6 @@
 #include <cstdio>
+// #define LOGGING_LEVEL_INFO
 #define LOGGING_LEVEL_DEBUG
-
 #include "core/cpu.hpp"
 #include "utils/logger.hpp"
 #include <iostream>

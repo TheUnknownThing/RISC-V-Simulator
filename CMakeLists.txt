@@ -17,5 +17,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
+# Set executable output directory
+# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # Main executable
 add_executable(riscv_simulator src/main.cpp)

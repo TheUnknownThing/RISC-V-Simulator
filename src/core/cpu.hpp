@@ -11,6 +11,7 @@
 #include "memory.hpp"
 #include "predictor.hpp"
 #include "register_file.hpp"
+#include <cstdint>
 #include <limits>
 #include <sstream>
 
@@ -64,7 +65,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 30000) {
+      if (cycle_count > 1000) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }
@@ -81,7 +82,7 @@ inline void CPU::Tick() {
   LOG_DEBUG("--- Fetch Stage ---");
   try {
     riscv::DecodedInstruction instr = fetch();
-
+    LOG_INFO("Fetched instruction from pc: " + to_hex(pc - 4));
     LOG_DEBUG("--- Issue Stage ---");
     issue(instr);
   } catch (const std::exception &e) {
@@ -393,33 +394,6 @@ inline void CPU::execute() {
 inline void CPU::broadcast() {
   LOG_DEBUG("Broadcasting execution results");
 
-  std::optional<PredictorResult> predictor_result;
-  if (pred.has_result_for_broadcast()) {
-    predictor_result = pred.get_result_for_broadcast();
-    LOG_DEBUG(
-        "Received Predictor broadcast for PC update - target=" +
-        to_hex(predictor_result->target_pc) + " (" +
-        std::to_string(predictor_result->target_pc) + " decimal), prediction=" +
-        std::to_string(predictor_result->prediction) +
-        ", mispredicted=" + std::to_string(predictor_result->is_mispredicted));
-
-    // misprediction recovery
-    if (predictor_result->is_mispredicted) {
-      LOG_WARN(
-          "Branch misprediction detected! Flushing pipeline and correcting PC");
-      LOG_DEBUG("Correcting PC from 0x" + std::to_string(pc) + " to 0x" +
-                std::to_string(predictor_result->correct_target));
-
-      // Flush
-      rob.flush();
-      rs.flush();
-
-      pc = predictor_result->correct_target;
-    }
-  } else {
-    LOG_DEBUG("No predictor broadcast available");
-  }
-
   rob.receive_broadcast();
 }
 
@@ -427,7 +401,7 @@ inline void CPU::commit() {
   LOG_DEBUG("Committing completed instructions");
   reg_file.print_debug_info();
   rs.print_debug_info();
-  rob.commit();
+  rob.commit(pc);
   rob.print_debug_info();
 }
 

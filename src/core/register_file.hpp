@@ -9,8 +9,8 @@
 class RegisterFile {
 public:
   RegisterFile();
-  void write(uint32_t rd, uint32_t value);
-  uint32_t read(uint32_t rd) const;
+  void write(uint32_t rd, int32_t value);
+  int32_t read(uint32_t rd) const;
   void flush();
   void receive_rob(uint32_t rd, uint32_t id);
   void mark_available(uint32_t rd);
@@ -18,7 +18,7 @@ public:
   void print_debug_info() const;
 
 private:
-  std::array<uint32_t, 32> registers;
+  std::array<int32_t, 32> registers;
   std::array<uint32_t, 32> rob_id;
 };
 
@@ -27,7 +27,7 @@ inline RegisterFile::RegisterFile() {
   rob_id.fill(std::numeric_limits<uint32_t>::max()); // All registers initially available
 }
 
-inline void RegisterFile::write(uint32_t rd, uint32_t value) {
+inline void RegisterFile::write(uint32_t rd, int32_t value) {
   if (rd == 0) {
     LOG_WARN("Attempted to write to register zero, ignoring.");
     return; // Register zero is always zero
@@ -57,7 +57,7 @@ inline uint32_t RegisterFile::get_rob(uint32_t rd) const {
   return rob_id[rd];
 }
 
-inline uint32_t RegisterFile::read(uint32_t rd) const { return registers[rd]; }
+inline int32_t RegisterFile::read(uint32_t rd) const { return registers[rd]; }
 
 inline void RegisterFile::flush() {
   rob_id.fill(std::numeric_limits<uint32_t>::max());
