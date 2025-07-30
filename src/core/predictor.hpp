@@ -12,8 +12,8 @@
 
 struct PredictorInstruction {
   uint32_t pc;
-  uint32_t rs1;
-  uint32_t rs2;
+  int32_t rs1;
+  int32_t rs2;
   std::optional<uint32_t> dest_tag;
   int32_t imm;
   std::variant<riscv::I_JumpOp, riscv::J_Op, riscv::B_BranchOp> branch_type;

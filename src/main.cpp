@@ -10,7 +10,7 @@ int main() {
 
   LOG_INFO("RISC-V Simulator starting...");
 
-  CPU cpu("../testcases/naive.data");
+  CPU cpu("../testcases/array_test1.data");
 
   LOG_INFO("Starting CPU execution");
   int result = cpu.run();
