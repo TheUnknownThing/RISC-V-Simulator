@@ -28,22 +28,41 @@ inline RegisterFile::RegisterFile() {
 }
 
 inline void RegisterFile::write(uint32_t rd, uint32_t value) {
+  if (rd == 0) {
+    LOG_WARN("Attempted to write to register zero, ignoring.");
+    return; // Register zero is always zero
+  }
   registers[rd] = value;
 }
 
-inline void RegisterFile::receive_rob(uint32_t rd, uint32_t id) { rob_id[rd] = id; }
+inline void RegisterFile::receive_rob(uint32_t rd, uint32_t id) {
+  if (rd == 0) {
+    LOG_WARN("Attempted to assign ROB ID to register zero, ignoring.");
+    return;
+  }
+  rob_id[rd] = id;
+}
 
 inline void RegisterFile::mark_available(uint32_t rd) {
+  if (rd == 0) {
+    return; // Register zero is always available
+  }
   rob_id[rd] = std::numeric_limits<uint32_t>::max();
 }
 
 inline uint32_t RegisterFile::get_rob(uint32_t rd) const {
+  if (rd == 0) {
+    return std::numeric_limits<uint32_t>::max();
+  }
   return rob_id[rd];
 }
 
 inline uint32_t RegisterFile::read(uint32_t rd) const { return registers[rd]; }
 
-inline void RegisterFile::flush() { registers.fill(0); }
+inline void RegisterFile::flush() { 
+  registers.fill(0);
+  rob_id.fill(std::numeric_limits<uint32_t>::max());
+}
 
 inline void RegisterFile::print_debug_info() const {
   LOG_DEBUG("Register File Debug Info:");

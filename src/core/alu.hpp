@@ -135,9 +135,9 @@ inline int32_t ALU::execute(
   } else if (std::holds_alternative<riscv::U_Op>(op)) {
     switch (std::get<riscv::U_Op>(op)) {
     case riscv::U_Op::LUI:
-      return b << 12;
+      return b;
     case riscv::U_Op::AUIPC:
-      return a + (b << 12);
+      return a + b;
     default:
       throw std::runtime_error("Invalid U-type operation");
     }

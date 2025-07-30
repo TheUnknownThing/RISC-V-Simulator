@@ -175,6 +175,7 @@ Predictor::calculate_target_pc() const {
     return target;
   } else if (std::holds_alternative<riscv::I_JumpOp>(current_instruction->branch_type)) {
     uint32_t target = (current_instruction->rs1 + current_instruction->imm) & ~1U;
+    target += 4;
     LOG_DEBUG("JALR target calculation: (" + std::to_string(current_instruction->rs1) + " + " + 
               std::to_string(current_instruction->imm) + ") & ~1 = " + to_hex(target));
     return target;

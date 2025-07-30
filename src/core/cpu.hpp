@@ -11,7 +11,6 @@
 #include "memory.hpp"
 #include "predictor.hpp"
 #include "register_file.hpp"
-#include <iomanip>
 #include <sstream>
 
 class CPU {
@@ -64,7 +63,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 30) {
+      if (cycle_count > 300) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }
@@ -79,10 +78,16 @@ inline int CPU::run() {
 
 inline void CPU::Tick() {
   LOG_DEBUG("--- Fetch Stage ---");
-  riscv::DecodedInstruction instr = fetch();
+  try {
+    riscv::DecodedInstruction instr = fetch();
 
-  LOG_DEBUG("--- Issue Stage ---");
-  issue(instr);
+    LOG_DEBUG("--- Issue Stage ---");
+    issue(instr);
+  } catch (const std::exception &e) {
+    LOG_WARN("Fetch/Issue stage skipped due to exception: " +
+              std::string(e.what()));
+    pc -= 4;
+  }
 
   LOG_DEBUG("--- Execute Stage ---");
   execute();
@@ -175,10 +180,9 @@ inline void CPU::execute() {
 
     // Skip if operands not ready
     if (ent.qj != 0 || ent.qk != 0) {
-      LOG_DEBUG("RS entry " + std::to_string(i) +
-                " waiting for operands (qj=" + std::to_string(ent.qj) +
-                ", qk=" + std::to_string(ent.qk) + ") with instruction: " +
-                riscv::to_string(ent.op));
+      LOG_DEBUG("RS entry " + std::to_string(i) + " waiting for operands (qj=" +
+                std::to_string(ent.qj) + ", qk=" + std::to_string(ent.qk) +
+                ") with instruction: " + riscv::to_string(ent.op));
       continue;
     }
 
@@ -209,6 +213,7 @@ inline void CPU::execute() {
           LSBInstruction instruction;
           instruction.op_type = LSBOpType::LOAD;
           instruction.address = ent.vj;
+          instruction.imm = ent.imm;
           instruction.dest_tag = ent.dest_tag;
           instruction.rob_id = ent.dest_tag;
           mem.add_instruction(instruction);
@@ -262,6 +267,7 @@ inline void CPU::execute() {
         instruction.op_type = LSBOpType::STORE;
         instruction.address = ent.vj;
         instruction.data = ent.vk;
+        instruction.imm = ent.imm;
         instruction.dest_tag = ent.dest_tag;
         instruction.rob_id = ent.dest_tag;
         mem.add_instruction(instruction);
@@ -378,6 +384,7 @@ inline void CPU::broadcast() {
 inline void CPU::commit() {
   LOG_DEBUG("Committing completed instructions");
   reg_file.print_debug_info();
+  rs.print_debug_info();
   rob.commit();
 }
 

@@ -56,7 +56,7 @@ inline std::string getTimestamp() {
 
 inline void log(Level level, const std::string& message) {
     if (static_cast<int>(level) <= static_cast<int>(getCurrentLevel())) {
-        std::cout << "[" << getTimestamp() << "] "
+        std::cerr << "[" << getTimestamp() << "] "
                   << "[" << getLevelString(level) << "] "
                   << message << std::endl;
     }

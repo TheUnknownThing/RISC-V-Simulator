@@ -1,3 +1,4 @@
+#include <cstdio>
 #define LOGGING_LEVEL_DEBUG
 
 #include "core/cpu.hpp"
@@ -5,6 +6,8 @@
 #include <iostream>
 
 int main() {
+  freopen("../logs/simulator.log", "w", stderr);
+
   LOG_INFO("RISC-V Simulator starting...");
 
   CPU cpu("../testcases/naive.data");
