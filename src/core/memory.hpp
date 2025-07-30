@@ -12,7 +12,7 @@ enum class LSBOpType { LOAD, STORE };
 
 struct LSBInstruction {
   LSBOpType op_type;
-  uint32_t address;
+  int32_t address;
   int32_t data;
   int32_t imm; // Immediate offset for address calculation
   uint32_t dest_tag;
@@ -65,6 +65,7 @@ public:
   void commit_memory(uint32_t rob_id);
 
   bool is_available() const;
+  void flush();
 };
 
 // Memory implementation
@@ -82,7 +83,7 @@ inline LSB::LSB()
     : broadcast_result(std::nullopt), next_broadcast_result(std::nullopt),
       busy(false) {}
 
-constexpr size_t LSB_SIZE = 16;
+constexpr size_t LSB_SIZE = 32;
 
 inline bool LSB::is_full() const { return lsb_entries.size() >= LSB_SIZE; }
 
@@ -195,6 +196,14 @@ inline void LSB::tick() {
   }
 
   busy = !lsb_entries.empty();
+}
+
+inline void LSB::flush() {
+  LOG_DEBUG("Flushing LSB - clearing all entries");
+  lsb_entries.clear();
+  broadcast_result = std::nullopt;
+  next_broadcast_result = std::nullopt;
+  busy = false;
 }
 
 #endif // CORE_MEMORY_HPP

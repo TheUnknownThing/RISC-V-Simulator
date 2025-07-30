@@ -11,9 +11,11 @@
 #include "memory.hpp"
 #include "predictor.hpp"
 #include "register_file.hpp"
+#include "riscv/instruction.hpp"
 #include <cstdint>
 #include <limits>
 #include <sstream>
+#include <variant>
 
 class CPU {
   RegisterFile reg_file;
@@ -43,6 +45,7 @@ private:
   void broadcast();
   void commit();
   void Tick();
+  void handle_branch_prediction(riscv::DecodedInstruction& instr, uint32_t current_pc);
 };
 
 inline CPU::CPU(std::string filename)
@@ -161,7 +164,7 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
   if (id != -1) {
     // --- THIS IS THE NEW LOGIC ---
     int32_t vj = 0, vk = 0;
-    uint32_t qj = 0, qk = 0;
+    uint32_t qj = std::numeric_limits<uint32_t>::max(), qk = std::numeric_limits<uint32_t>::max();
 
     // Resolve source operand 1 (rs1)
     if (rs1.has_value()) {
@@ -176,7 +179,7 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
         auto rob_value = rob.get_value(rob_tag);
         if (rob_value.has_value()) {
           vj = rob_value.value();
-          qj = 0; // Clear qj since we have the value
+          qj = std::numeric_limits<uint32_t>::max(); // Clear qj since we have the value
           LOG_DEBUG("Resolved ROB value for rs1: " + std::to_string(vj));
         }
       }
@@ -195,7 +198,7 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
         auto rob_value = rob.get_value(rob_tag);
         if (rob_value.has_value()) {
           vk = rob_value.value();
-          qk = 0; // Clear qk since we have the value
+          qk = std::numeric_limits<uint32_t>::max(); // Clear qk since we have the value
           LOG_DEBUG("Resolved ROB value for rs2: " + std::to_string(vk));
         }
       }
@@ -209,6 +212,26 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
     rs.add_entry(instr, vj, vk, qj, qk, imm, id, pc - 4);
     LOG_DEBUG("Added entry to Reservation Station");
     // --- END OF NEW LOGIC ---
+
+    // check prediction instruction
+    // B
+    if (std::holds_alternative<riscv::B_Instruction>(instr)) {
+      // pc = pred.calculate_target_pc();
+      pc += std::get<riscv::B_Instruction>(instr).imm;
+      pc -= 4; // because we already incremented PC in fetch
+      LOG_DEBUG("Branch instruction, updated PC to: " + to_hex(pc));
+    } else if (std::holds_alternative<riscv::J_Instruction>(instr)) {
+      // JAL
+      pc += std::get<riscv::J_Instruction>(instr).imm;
+      pc -= 4; // because we already incremented PC in fetch
+      LOG_DEBUG("JAL instruction, updated PC to: " + to_hex(pc));
+      } else if (std::holds_alternative<riscv::I_Instruction>(instr) &&
+                 std::holds_alternative<riscv::I_JumpOp>(
+                     std::get<riscv::I_Instruction>(instr).op)) {
+      // JALR
+      // do nothing 
+      LOG_DEBUG("JALR instruction, updated PC to: " + to_hex(pc));
+    }
 
     if (rd.has_value()) {
       reg_file.receive_rob(rd.value(), id);
@@ -229,7 +252,7 @@ inline void CPU::execute() {
     ReservationStationEntry &ent = rs.rs.get(i);
 
     // Skip if operands not ready
-    if (ent.qj != 0 || ent.qk != 0) {
+    if (ent.qj != std::numeric_limits<uint32_t>::max() || ent.qk != std::numeric_limits<uint32_t>::max()) {
       LOG_DEBUG("RS entry " + std::to_string(i) + " waiting for operands (qj=" +
                 std::to_string(ent.qj) + ", qk=" + std::to_string(ent.qk) +
                 ") with instruction: " + riscv::to_string(ent.op));
@@ -295,12 +318,12 @@ inline void CPU::execute() {
           instruction.rs2 = 0; // JALR doesn't use rs2
           instruction.dest_tag = ent.dest_tag;
           instruction.imm = ent.imm; // For JALR, imm is in the ent.imm field
+          instruction.rob_id = ent.dest_tag; // Use the ROB ID for tracking
           instruction.branch_type = std::get<riscv::I_JumpOp>(i_instr->op);
           LOG_DEBUG("JALR: rs1_val=" + std::to_string(instruction.rs1) +
                     ", imm=" + std::to_string(instruction.imm));
           pred.set_instruction(instruction);
           dispatched = true;
-          pc = pred.calculate_target_pc();
         } else {
           LOG_DEBUG("Predictor busy, cannot dispatch jump instruction");
         }
@@ -329,10 +352,10 @@ inline void CPU::execute() {
         instruction.rs2 = ent.vk;
         instruction.dest_tag = std::nullopt;
         instruction.imm = ent.imm;
+        instruction.rob_id = ent.dest_tag; // Use the ROB ID for tracking
         instruction.branch_type = std::get<riscv::B_Instruction>(ent.op).op;
         pred.set_instruction(instruction);
         dispatched = true;
-        pc = pred.calculate_target_pc();
       } else {
         LOG_DEBUG("Predictor busy, cannot dispatch branch instruction");
       }
@@ -361,6 +384,7 @@ inline void CPU::execute() {
         instruction.rs1 = 0;     // JAL doesn't use rs1
         instruction.rs2 = 0;     // JAL doesn't use rs2
         instruction.dest_tag = ent.dest_tag;
+        instruction.rob_id = ent.dest_tag; // Use the ROB ID for tracking
         instruction.imm =
             ent.imm; // Use the immediate from the reservation station
         instruction.branch_type = std::get<riscv::J_Instruction>(ent.op).op;
@@ -368,7 +392,6 @@ inline void CPU::execute() {
                   ", imm=" + std::to_string(instruction.imm));
         pred.set_instruction(instruction);
         dispatched = true;
-        pc = pred.calculate_target_pc();
       } else {
         LOG_DEBUG("Predictor busy, cannot dispatch J-type jump instruction");
       }

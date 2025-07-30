@@ -62,20 +62,20 @@ inline void ReservationStation::receive_broadcast(int32_t value, uint32_t dest_t
     
     if (ent.qj == dest_tag) {
       ent.vj = value;
-      ent.qj = 0;
+      ent.qj = std::numeric_limits<uint32_t>::max();
       LOG_DEBUG("Updated operand vj for RS entry " + std::to_string(i));
       updated = true;
     }
     if (ent.qk == dest_tag) {
       ent.vk = value;
-      ent.qk = 0;
+      ent.qk = std::numeric_limits<uint32_t>::max();
       LOG_DEBUG("Updated operand vk for RS entry " + std::to_string(i));
       updated = true;
     }
     
     if (updated) {
       updated_entries++;
-      if (ent.qj == 0 && ent.qk == 0) {
+      if (ent.qj == std::numeric_limits<uint32_t>::max() && ent.qk == std::numeric_limits<uint32_t>::max()) {
         LOG_DEBUG("RS entry " + std::to_string(i) + " now ready for execution");
       }
     }
