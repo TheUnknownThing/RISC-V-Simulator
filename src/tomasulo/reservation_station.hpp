@@ -22,7 +22,6 @@ struct ReservationStationEntry {
 
 class ReservationStation {
   RegisterFile &reg_file;
-  
 public:
   CircularQueue<ReservationStationEntry> rs;
   ReservationStation(RegisterFile &reg_file);

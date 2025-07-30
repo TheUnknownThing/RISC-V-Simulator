@@ -10,13 +10,13 @@ int main() {
 
   LOG_INFO("RISC-V Simulator starting...");
 
-  CPU cpu("../testcases/naive.data");
+  CPU cpu("../testcases/array_test1.data");
 
   LOG_INFO("Starting CPU execution");
   int result = cpu.run();
 
   LOG_INFO("CPU execution completed with result: " + std::to_string(result));
-  std::cout << result << std::endl;
+  std::cout << (result & 0xFF) << std::endl;
 
   return EXIT_SUCCESS;
 }

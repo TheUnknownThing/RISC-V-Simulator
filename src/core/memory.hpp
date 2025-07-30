@@ -1,6 +1,7 @@
 #ifndef CORE_MEMORY_HPP
 #define CORE_MEMORY_HPP
 
+#include "utils/logger.hpp"
 #include <cstdint>
 #include <optional>
 #include <queue>
@@ -13,6 +14,7 @@ struct LSBInstruction {
   LSBOpType op_type;
   uint32_t address;
   int32_t data;
+  int32_t imm; // Immediate offset for address calculation
   uint32_t dest_tag;
   uint32_t rob_id;
 };
@@ -44,7 +46,7 @@ public:
 };
 
 class LSB {
-  std::queue<LSBEntry> lsb_queue;
+  std::vector<LSBEntry> lsb_entries;
   std::optional<MemoryResult> broadcast_result;
   std::optional<MemoryResult> next_broadcast_result;
   Memory memory;
@@ -63,11 +65,6 @@ public:
   void commit_memory(uint32_t rob_id);
 
   bool is_available() const;
-
-private:
-  bool can_execute_load(const LSBEntry &entry) const;
-  bool has_dependency(uint32_t address, uint32_t rob_id) const;
-  void execute_head();
 };
 
 // Memory implementation
@@ -87,13 +84,23 @@ inline LSB::LSB()
 
 constexpr size_t LSB_SIZE = 16;
 
-inline bool LSB::is_full() const { return lsb_queue.size() >= LSB_SIZE; }
+inline bool LSB::is_full() const { return lsb_entries.size() >= LSB_SIZE; }
 
 inline void LSB::add_instruction(LSBInstruction instruction) {
   if (is_full()) {
     throw std::runtime_error("LSB is full");
   }
-  lsb_queue.emplace(instruction);
+  
+  LSBEntry new_entry(instruction);
+  
+  // Insert in order by ROB ID
+  auto insert_pos = std::lower_bound(
+      lsb_entries.begin(), lsb_entries.end(), new_entry,
+      [](const LSBEntry &a, const LSBEntry &b) {
+        return a.instruction.rob_id < b.instruction.rob_id;
+      });
+  
+  lsb_entries.insert(insert_pos, new_entry);
   busy = true;
 }
 
@@ -111,106 +118,83 @@ inline MemoryResult LSB::get_result_for_broadcast() const {
 }
 
 inline void LSB::commit_memory(uint32_t rob_id) {
-  std::queue<LSBEntry> temp_queue;
-  bool found = false;
-  while (!lsb_queue.empty()) {
-    LSBEntry entry = lsb_queue.front();
-    lsb_queue.pop();
-
-    if (!found && entry.instruction.rob_id == rob_id &&
+  for (auto &entry : lsb_entries) {
+    if (entry.instruction.rob_id <= rob_id &&
         entry.instruction.op_type == LSBOpType::STORE) {
       entry.committed = true;
-      found = true;
-    }
-    temp_queue.push(entry);
-  }
-  lsb_queue = temp_queue;
-}
-
-inline bool LSB::has_dependency(uint32_t address, uint32_t rob_id) const {
-  std::queue<LSBEntry> temp_queue = lsb_queue;
-  while (!temp_queue.empty()) {
-    const LSBEntry &entry = temp_queue.front();
-    if (entry.instruction.rob_id < rob_id &&
-        entry.instruction.op_type == LSBOpType::STORE &&
-        entry.instruction.address == address && !entry.committed) {
-      return true;
-    }
-    if (entry.instruction.rob_id >= rob_id) {
+      LOG_DEBUG("Committed STORE instruction for ROB ID: " + std::to_string(rob_id));
       break;
     }
-    temp_queue.pop();
-  }
-  return false;
-}
-
-inline bool LSB::can_execute_load(const LSBEntry &entry) const {
-  if (entry.instruction.op_type != LSBOpType::LOAD) {
-    return false;
-  }
-  return !has_dependency(entry.instruction.address, entry.instruction.rob_id);
-}
-
-inline void LSB::execute_head() {
-  if (lsb_queue.empty()) {
-    return;
-  }
-  LSBEntry &head = lsb_queue.front();
-  if (head.executing) {
-    return;
-  }
-
-  bool can_execute = false;
-  if (head.instruction.op_type == LSBOpType::LOAD) {
-    can_execute = can_execute_load(head);
-  } else { 
-    can_execute = head.committed;
-  }
-
-  if (can_execute) {
-    head.executing = true;
-    head.cycles_remaining = 3;
   }
 }
 
 inline void LSB::tick() {
+  // Move next_broadcast_result to broadcast_result
   broadcast_result = next_broadcast_result;
   next_broadcast_result = std::nullopt;
 
-  execute_head();
-
-  if (!lsb_queue.empty()) {
-    std::queue<LSBEntry> temp_queue;
-    while (!lsb_queue.empty()) {
-      LSBEntry entry = lsb_queue.front();
-      lsb_queue.pop();
-
-      if (entry.executing && entry.cycles_remaining > 0) {
-        entry.cycles_remaining--;
-
-        if (entry.cycles_remaining == 0) {
-          MemoryResult result;
-          result.rob_id = entry.instruction.rob_id;
-          result.op_type = entry.instruction.op_type;
-
-          if (entry.instruction.op_type == LSBOpType::LOAD) {
-            result.data = memory.read(entry.instruction.address);
-            result.dest_tag = entry.instruction.dest_tag;
-            next_broadcast_result = result;
-          } else { // STORE
-            memory.write(entry.instruction.address, entry.instruction.data);
-            result.data = 0; // No data to broadcast
-            result.dest_tag = 0; // No destination register
-            next_broadcast_result = result;
-          }
-          continue;
-        }
-      }
-      temp_queue.push(entry);
-    }
-    lsb_queue = temp_queue;
+  if (lsb_entries.empty()) {
+    busy = false;
+    return;
   }
-  busy = !lsb_queue.empty();
+
+  LOG_DEBUG("Memory Unit Executing: " + std::to_string(lsb_entries.size()) +
+            " entries in LSB");
+
+  // Process the first entry that can execute
+  for (auto it = lsb_entries.begin(); it != lsb_entries.end(); ++it) {
+    LSBEntry &entry = *it;
+    uint32_t effective_address = entry.instruction.address + entry.instruction.imm;
+
+    LOG_DEBUG(
+        "Processing Instruction: rob_id=" +
+        std::to_string(entry.instruction.rob_id) +
+        ", effective_addr=" + std::to_string(effective_address) + ", op_type=" +
+        (entry.instruction.op_type == LSBOpType::LOAD ? "LOAD" : "STORE") +
+        ", committed=" + std::to_string(entry.committed) +
+        ", executing=" + std::to_string(entry.executing));
+
+    // Start executing if:
+    // 1. It's a LOAD (can execute during regular tick)
+    // 2. It's a STORE that has been committed
+    if (!entry.executing) {
+      bool can_execute = (entry.instruction.op_type == LSBOpType::LOAD) ||
+                         (entry.instruction.op_type == LSBOpType::STORE &&
+                          entry.committed);
+
+      if (can_execute) {
+        entry.executing = true;
+        entry.cycles_remaining = 3; // Set latency for memory access
+      }
+    }
+
+    // Continue execution if already started
+    if (entry.executing) {
+      entry.cycles_remaining--;
+
+      if (entry.cycles_remaining == 0) {
+        // Instruction finished, prepare result for broadcast
+        MemoryResult result;
+        result.rob_id = entry.instruction.rob_id;
+        result.op_type = entry.instruction.op_type;
+
+        if (entry.instruction.op_type == LSBOpType::LOAD) {
+          result.data = memory.read(effective_address);
+          result.dest_tag = entry.instruction.dest_tag;
+        } else { // STORE
+          memory.write(effective_address, entry.instruction.data);
+          result.data = 0;     // Data is not broadcasted for stores
+          result.dest_tag = 0; // No destination register for stores
+        }
+
+        next_broadcast_result = result;
+        lsb_entries.erase(it); // Remove completed instruction
+        break; // Only process one instruction per tick
+      }
+    }
+  }
+
+  busy = !lsb_entries.empty();
 }
 
 #endif // CORE_MEMORY_HPP

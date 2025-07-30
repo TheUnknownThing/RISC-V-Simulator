@@ -85,7 +85,7 @@ inline void CPU::Tick() {
     issue(instr);
   } catch (const std::exception &e) {
     LOG_WARN("Fetch/Issue stage skipped due to exception: " +
-              std::string(e.what()));
+             std::string(e.what()));
     pc -= 4;
   }
 
@@ -207,20 +207,17 @@ inline void CPU::execute() {
       // I-type -> check operation subtype
       if (std::holds_alternative<riscv::I_LoadOp>(i_instr->op)) {
         // Load -> Memory unit
-        if (mem.is_available()) {
-          LOG_DEBUG("Dispatching I-type load instruction to memory unit (tag=" +
-                    std::to_string(ent.dest_tag) + ")");
-          LSBInstruction instruction;
-          instruction.op_type = LSBOpType::LOAD;
-          instruction.address = ent.vj;
-          instruction.imm = ent.imm;
-          instruction.dest_tag = ent.dest_tag;
-          instruction.rob_id = ent.dest_tag;
-          mem.add_instruction(instruction);
-          dispatched = true;
-        } else {
-          LOG_DEBUG("Memory unit busy, cannot dispatch load instruction");
-        }
+        LOG_DEBUG("Dispatching I-type load instruction to memory unit (tag=" +
+                  std::to_string(ent.dest_tag) +
+                  ", rob_id=" + std::to_string(ent.dest_tag) + ")");
+        LSBInstruction instruction;
+        instruction.op_type = LSBOpType::LOAD;
+        instruction.address = ent.vj;
+        instruction.imm = ent.imm;
+        instruction.dest_tag = ent.dest_tag;
+        instruction.rob_id = ent.dest_tag;
+        mem.add_instruction(instruction);
+        dispatched = true;
       } else if (std::holds_alternative<riscv::I_ArithmeticOp>(i_instr->op)) {
         // Arithmetic -> ALU
         if (alu.is_available()) {
@@ -260,21 +257,17 @@ inline void CPU::execute() {
       }
     } else if (std::holds_alternative<riscv::S_Instruction>(ent.op)) {
       // Store -> Memory unit
-      if (mem.is_available()) {
-        LOG_DEBUG("Dispatching S-type store instruction to memory unit (tag=" +
-                  std::to_string(ent.dest_tag) + ")");
-        LSBInstruction instruction;
-        instruction.op_type = LSBOpType::STORE;
-        instruction.address = ent.vj;
-        instruction.data = ent.vk;
-        instruction.imm = ent.imm;
-        instruction.dest_tag = ent.dest_tag;
-        instruction.rob_id = ent.dest_tag;
-        mem.add_instruction(instruction);
-        dispatched = true;
-      } else {
-        LOG_DEBUG("Memory unit busy, cannot dispatch store instruction");
-      }
+      LOG_DEBUG("Dispatching S-type store instruction to memory unit (tag=" +
+                std::to_string(ent.dest_tag) + ")");
+      LSBInstruction instruction;
+      instruction.op_type = LSBOpType::STORE;
+      instruction.address = ent.vj;
+      instruction.data = ent.vk;
+      instruction.imm = ent.imm;
+      instruction.dest_tag = ent.dest_tag;
+      instruction.rob_id = ent.dest_tag;
+      mem.add_instruction(instruction);
+      dispatched = true;
     } else if (std::holds_alternative<riscv::B_Instruction>(ent.op)) {
       // Branch -> Predictor
       if (pred.is_available()) {
