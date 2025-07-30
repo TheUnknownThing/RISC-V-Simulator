@@ -11,6 +11,7 @@
 #include "memory.hpp"
 #include "predictor.hpp"
 #include "register_file.hpp"
+#include <limits>
 #include <sstream>
 
 class CPU {
@@ -63,7 +64,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 300) {
+      if (cycle_count > 30000) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }
@@ -157,8 +158,56 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
 
   int id = rob.add_entry(instr, rd);
   if (id != -1) {
-    rs.add_entry(instr, rs1, rs2, imm, id);
+    // --- THIS IS THE NEW LOGIC ---
+    int32_t vj = 0, vk = 0;
+    uint32_t qj = 0, qk = 0;
+
+    // Resolve source operand 1 (rs1)
+    if (rs1.has_value()) {
+      uint32_t rob_tag = reg_file.get_rob(rs1.value());
+      if (rob_tag == std::numeric_limits<uint32_t>::max()) { // Register is ready
+        vj = reg_file.read(rs1.value());
+        LOG_DEBUG("Source operand 1 (rs1) is ready: reg" + std::to_string(rs1.value()) + " = " + std::to_string(vj));
+      } else { // Register is busy, waiting on a ROB result
+        qj = rob_tag;
+        LOG_DEBUG("Source operand 1 (rs1) is waiting for ROB tag: " + std::to_string(qj));
+        // check ROB
+        auto rob_value = rob.get_value(rob_tag);
+        if (rob_value.has_value()) {
+          vj = rob_value.value();
+          qj = 0; // Clear qj since we have the value
+          LOG_DEBUG("Resolved ROB value for rs1: " + std::to_string(vj));
+        }
+      }
+    }
+
+    // Resolve source operand 2 (rs2) or use immediate
+    if (rs2.has_value()) {
+      uint32_t rob_tag = reg_file.get_rob(rs2.value());
+      if (rob_tag == std::numeric_limits<uint32_t>::max()) { // Register is ready
+        vk = reg_file.read(rs2.value());
+        LOG_DEBUG("Source operand 2 (rs2) is ready: reg" + std::to_string(rs2.value()) + " = " + std::to_string(vk));
+      } else { // Register is busy, waiting on a ROB result
+        qk = rob_tag;
+        LOG_DEBUG("Source operand 2 (rs2) is waiting for ROB tag: " + std::to_string(qk));
+        // check ROB
+        auto rob_value = rob.get_value(rob_tag);
+        if (rob_value.has_value()) {
+          vk = rob_value.value();
+          qk = 0; // Clear qk since we have the value
+          LOG_DEBUG("Resolved ROB value for rs2: " + std::to_string(vk));
+        }
+      }
+    } else {
+      // If rs2 is not used (e.g., I-type), the immediate acts as the second ALU operand.
+      vk = imm.value_or(0);
+      LOG_DEBUG("Source operand 2 is an immediate value: " + std::to_string(vk));
+    }
+    
+    // Call the simplified add_entry with resolved values
+    rs.add_entry(instr, vj, vk, qj, qk, imm, id, pc - 4);
     LOG_DEBUG("Added entry to Reservation Station");
+    // --- END OF NEW LOGIC ---
 
     if (rd.has_value()) {
       reg_file.receive_rob(rd.value(), id);
@@ -239,7 +288,7 @@ inline void CPU::execute() {
           LOG_DEBUG("Dispatching I-type jump instruction to predictor (tag=" +
                     std::to_string(ent.dest_tag) + ")");
           PredictorInstruction instruction;
-          instruction.pc = pc - 4; // PC where this instruction was fetched from
+          instruction.pc = ent.pc; // PC where this instruction was fetched from
           instruction.rs1 =
               ent.vj; // This should be the value of the source register
           instruction.rs2 = 0; // JALR doesn't use rs2
@@ -274,7 +323,7 @@ inline void CPU::execute() {
         LOG_DEBUG("Dispatching B-type branch instruction to predictor (tag=" +
                   std::to_string(ent.dest_tag) + ")");
         PredictorInstruction instruction;
-        instruction.pc = pc - 4; // PC where this instruction was fetched from
+        instruction.pc = ent.pc; // PC where this instruction was fetched from
         instruction.rs1 = ent.vj;
         instruction.rs2 = ent.vk;
         instruction.dest_tag = std::nullopt;
@@ -307,7 +356,7 @@ inline void CPU::execute() {
         LOG_DEBUG("Dispatching J-type jump instruction to predictor (tag=" +
                   std::to_string(ent.dest_tag) + ")");
         PredictorInstruction instruction;
-        instruction.pc = pc - 4; // PC where this instruction was fetched from
+        instruction.pc = ent.pc; // PC where this instruction was fetched from
         instruction.rs1 = 0;     // JAL doesn't use rs1
         instruction.rs2 = 0;     // JAL doesn't use rs2
         instruction.dest_tag = ent.dest_tag;
@@ -379,6 +428,7 @@ inline void CPU::commit() {
   reg_file.print_debug_info();
   rs.print_debug_info();
   rob.commit();
+  rob.print_debug_info();
 }
 
 #endif // CORE_CPU_HPP

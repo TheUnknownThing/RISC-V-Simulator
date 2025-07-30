@@ -32,7 +32,6 @@ class Predictor {
   std::optional<PredictorInstruction> current_instruction;
   std::optional<PredictorResult> broadcast_result;
   std::optional<PredictorResult> next_broadcast_result;
-  bool busy;
 
   // Helper function for hex formatting
   std::string to_hex(uint32_t value) const {
@@ -68,7 +67,7 @@ private:
 
 inline Predictor::Predictor()
     : current_instruction(std::nullopt), broadcast_result(std::nullopt),
-      next_broadcast_result(std::nullopt), busy(false),
+      next_broadcast_result(std::nullopt),
       state(State::WEAK_NOT_TAKEN) {}
 
 inline void Predictor::update(bool taken) {
@@ -96,7 +95,7 @@ inline void Predictor::update(bool taken) {
   }
 }
 
-inline bool Predictor::is_available() const { return !busy; }
+inline bool Predictor::is_available() const { return true; }
 
 inline bool Predictor::has_result_for_broadcast() const {
   return broadcast_result.has_value();
@@ -113,7 +112,6 @@ inline PredictorResult Predictor::get_result_for_broadcast() const {
 
 inline void Predictor::set_instruction(PredictorInstruction instruction) {
   current_instruction = instruction;
-  busy = true;
 }
 
 inline bool Predictor::predict() const {
@@ -219,10 +217,8 @@ inline void Predictor::tick() {
 
     next_broadcast_result = new_result;
     current_instruction = std::nullopt;
-    busy = false;
   } else {
     next_broadcast_result = std::nullopt;
-    busy = false;
   }
 }
 

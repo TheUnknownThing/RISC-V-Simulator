@@ -53,6 +53,7 @@ public:
   void receive_broadcast();
   void flush();
   std::optional<int32_t> get_value(std::optional<uint32_t> rob_id);
+  void print_debug_info();
 };
 
 inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu,
@@ -224,27 +225,38 @@ inline void ReorderBuffer::flush() {
   LOG_DEBUG("ROB flush completed");
 }
 
-inline std::optional<int32_t> ReorderBuffer::get_value(std::optional<uint32_t> dest) {
-  if (!dest.has_value()) {
-    LOG_DEBUG("No dest_tag provided, returning nullopt");
+inline std::optional<int32_t> ReorderBuffer::get_value(std::optional<uint32_t> rob_id) {
+  if (!rob_id.has_value()) {
+    LOG_DEBUG("No rob_id provided, returning nullopt");
     return std::nullopt;
   }
-  uint32_t dest_tag = dest.value();
+  uint32_t id = rob_id.value();
   for (int i = 0; i < rob.size(); i++) {
     const auto &ent = rob.get(i);
-    if (ent.dest_tag == dest_tag) {
+    if (ent.id == id) {
       if (ent.ready) {
         return static_cast<int32_t>(ent.value);
       } else {
-        LOG_DEBUG("ROB entry ID: " + std::to_string(dest_tag) +
+        LOG_DEBUG("ROB entry ID: " + std::to_string(id) +
                   " is not ready, cannot retrieve value");
         return std::nullopt;
       }
     }
   }
-  LOG_DEBUG("ROB entry ID: " + std::to_string(dest_tag) +
+  LOG_DEBUG("ROB entry ID: " + std::to_string(id) +
             " not found, returning nullopt");
   return std::nullopt;
+}
+
+void ReorderBuffer::print_debug_info() {
+  LOG_DEBUG("Reorder Buffer Debug Info:");
+  for (int i = 0; i < rob.size(); i++) {
+    const auto &ent = rob.get(i);
+    LOG_DEBUG("  Entry " + std::to_string(i) + ": " +
+              "ID: " + std::to_string(ent.id) +
+              ", Value: " + std::to_string(ent.value) +
+              ", Ready: " + (ent.ready ? "true" : "false"));
+  }
 }
 
 #endif // TOMASULO_REORDER_BUFFER_HPP

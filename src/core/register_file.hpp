@@ -59,8 +59,7 @@ inline uint32_t RegisterFile::get_rob(uint32_t rd) const {
 
 inline uint32_t RegisterFile::read(uint32_t rd) const { return registers[rd]; }
 
-inline void RegisterFile::flush() { 
-  registers.fill(0);
+inline void RegisterFile::flush() {
   rob_id.fill(std::numeric_limits<uint32_t>::max());
 }
 
