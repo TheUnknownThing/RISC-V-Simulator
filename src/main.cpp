@@ -9,6 +9,10 @@
 int main() {
   // freopen("../logs/simulator.log", "w", stderr);
 
+  std::ios::sync_with_stdio(false);
+  std::cin.tie(nullptr);
+  std::cout.tie(nullptr);
+
   LOG_INFO("RISC-V Simulator starting...");
 
   CPU cpu;
