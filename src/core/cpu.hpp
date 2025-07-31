@@ -76,7 +76,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 5000000000) {
+      if (cycle_count > 2000000000) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }
@@ -168,7 +168,7 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
     LOG_DEBUG("J-type immediate value: " + std::to_string(imm.value()));
   }
 
-  int id = rob.add_entry(instr, rd);
+  int id = rob.add_entry(instr, rd, pc - 4);
   if (id != -1) {
     // --- THIS IS THE NEW LOGIC ---
     int32_t vj = 0, vk = 0;

@@ -36,6 +36,7 @@ struct ReorderBufferEntry {
   bool exception_flag;
   uint32_t id;
   uint32_t pc;
+  uint32_t instruction_pc; // PC where this instruction was fetched from, for debug
 };
 
 class ReorderBuffer {
@@ -53,7 +54,7 @@ public:
                 LSB &mem, ReservationStation &rs);
 
   int add_entry(riscv::DecodedInstruction instr,
-                std::optional<uint32_t> dest_tag);
+                std::optional<uint32_t> dest_tag, uint32_t instr_pc);
   void commit(uint32_t &pc);
   void receive_broadcast();
   void flush();
@@ -65,14 +66,17 @@ inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu,
                                     Predictor &predictor, LSB &mem,
                                     ReservationStation &rs)
     : rob(32), reg_file(reg_file), alu(alu), predictor(predictor), mem(mem),
-      rs(rs) {
+      rs(rs)
+      // , reg_dumper("register_dump.txt") 
+      {
   LOG_DEBUG("ReorderBuffer initialized with capacity: 32");
 }
 
 inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
-                                    std::optional<uint32_t> dest_tag) {
+                                    std::optional<uint32_t> dest_tag, uint32_t instr_pc) {
   if (!rob.isFull()) {
     ReorderBufferEntry ent(instr, dest_tag, cur_id++);
+    ent.instruction_pc = instr_pc;
     rob.enqueue(ent);
     LOG_DEBUG("Added entry to ROB with ID: " + std::to_string(ent.id) +
               (dest_tag.has_value()
@@ -152,6 +156,7 @@ inline void ReorderBuffer::commit(uint32_t &pc) {
     for (size_t i = 0; i < 32; ++i) {
       reg_snapshot[i] = static_cast<uint32_t>(reg_file.read(i));
     }
+    // reg_dumper.dump(ent.instruction_pc, reg_snapshot);
     
     rob.dequeue();
     LOG_DEBUG("Instruction committed and removed from ROB");
@@ -256,7 +261,7 @@ inline void ReorderBuffer::flush() {
   }
 
   // Reset ID counter
-  cur_id = 0;
+  // cur_id = 0;
   LOG_DEBUG("ROB flush completed");
 }
 

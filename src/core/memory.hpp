@@ -122,7 +122,6 @@ inline void LSB::commit_memory(uint32_t rob_id) {
     if (entry.instruction.rob_id <= rob_id) {
       entry.committed = true;
       LOG_DEBUG("Committed STORE instruction for ROB ID: " + std::to_string(rob_id));
-      break;
     }
   }
 }
