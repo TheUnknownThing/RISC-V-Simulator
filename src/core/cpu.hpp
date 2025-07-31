@@ -36,6 +36,7 @@ class CPU {
 
 public:
   CPU(std::string filename);
+  CPU();
   int run();
 
 private:
@@ -58,6 +59,14 @@ inline CPU::CPU(std::string filename)
   
   LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
 }
+
+inline CPU::CPU()
+    : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file),
+      loader(), pc(0) {
+  LOG_INFO("CPU initialized with binary data from stdin");
+  LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
+}
+
 
 inline int CPU::run() {
   LOG_INFO("Starting CPU execution loop");
