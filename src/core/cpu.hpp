@@ -36,6 +36,7 @@ class CPU {
 
 public:
   CPU(std::string filename);
+  CPU(); // Constructor for stdin input
   int run();
 
 private:
@@ -55,6 +56,13 @@ inline CPU::CPU(std::string filename)
   LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
 }
 
+inline CPU::CPU()
+    : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file),
+      loader(), pc(0) {
+  LOG_INFO("CPU initialized with binary data from stdin");
+  LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
+}
+
 inline int CPU::run() {
   LOG_INFO("Starting CPU execution loop");
   int cycle_count = 0;
@@ -68,7 +76,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 1000) {
+      if (cycle_count > 5000) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }

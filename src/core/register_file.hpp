@@ -17,8 +17,8 @@ public:
   uint32_t get_rob(uint32_t rd) const;
   void print_debug_info() const;
 
-private:
   std::array<int32_t, 32> registers;
+private:
   std::array<uint32_t, 32> rob_id;
 };
 
