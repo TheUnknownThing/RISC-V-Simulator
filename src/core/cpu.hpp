@@ -88,7 +88,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 1000000000) {
+      if (cycle_count > 2000000000) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }

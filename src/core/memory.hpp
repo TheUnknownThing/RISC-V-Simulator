@@ -186,9 +186,7 @@ inline void LSB::tick() {
     // 1. It's a LOAD (can execute during regular tick)
     // 2. It's a STORE that has been committed
     if (!entry.executing) {
-      bool can_execute = (entry.instruction.op_type == LSBOpType::LOAD) ||
-                         (entry.instruction.op_type == LSBOpType::STORE &&
-                          entry.committed);
+      bool can_execute = entry.committed;
 
       if (can_execute) {
         entry.executing = true;

@@ -34,8 +34,8 @@ void load_program(const std::string& filename, Memory& memory) {
 
 int main() {
 
-  std::string program_filename = "../testcases/expr.data";
-  std::string dump_filename = "../dump/expr.dump";
+  std::string program_filename = "../testcases/multiarray.data";
+  std::string dump_filename = "../dump/multiarray.dump";
 
   try {
     Memory memory;
