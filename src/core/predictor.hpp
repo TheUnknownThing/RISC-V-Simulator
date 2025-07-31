@@ -11,6 +11,7 @@
 #include <iomanip>
 
 struct PredictorInstruction {
+  uint32_t rob_id;
   uint32_t pc;
   int32_t rs1;
   int32_t rs2;
@@ -20,6 +21,7 @@ struct PredictorInstruction {
 };
 
 struct PredictorResult {
+  uint32_t rob_id;
   bool prediction;
   uint32_t pc;
   std::optional<uint32_t> dest_tag;
@@ -40,9 +42,10 @@ class Predictor {
     return ss.str();
   }
 
+  bool busy = false;
+
 public:
   Predictor();
-  void update(bool taken);
   bool is_available() const;
   void set_instruction(PredictorInstruction instruction);
   bool has_result_for_broadcast() const;
@@ -52,14 +55,6 @@ public:
   uint32_t calculate_target_pc() const;
 
 private:
-  enum class State {
-    STRONG_TAKEN,
-    WEAK_TAKEN,
-    WEAK_NOT_TAKEN,
-    STRONG_NOT_TAKEN
-  };
-  State state;
-
   bool predict() const;
   bool is_unconditional_jump(const std::variant<riscv::I_JumpOp, riscv::J_Op,
                                                 riscv::B_BranchOp> &type) const;
@@ -67,35 +62,9 @@ private:
 
 inline Predictor::Predictor()
     : current_instruction(std::nullopt), broadcast_result(std::nullopt),
-      next_broadcast_result(std::nullopt),
-      state(State::WEAK_NOT_TAKEN) {}
+      next_broadcast_result(std::nullopt) {}
 
-inline void Predictor::update(bool taken) {
-  switch (state) {
-  case State::STRONG_TAKEN:
-    if (!taken)
-      state = State::WEAK_TAKEN;
-    break;
-  case State::WEAK_TAKEN:
-    if (taken)
-      state = State::STRONG_TAKEN;
-    else
-      state = State::WEAK_NOT_TAKEN;
-    break;
-  case State::WEAK_NOT_TAKEN:
-    if (taken)
-      state = State::WEAK_TAKEN;
-    else
-      state = State::STRONG_NOT_TAKEN;
-    break;
-  case State::STRONG_NOT_TAKEN:
-    if (taken)
-      state = State::WEAK_NOT_TAKEN;
-    break;
-  }
-}
-
-inline bool Predictor::is_available() const { return true; }
+inline bool Predictor::is_available() const { return !busy; }
 
 inline bool Predictor::has_result_for_broadcast() const {
   return broadcast_result.has_value();
@@ -112,10 +81,11 @@ inline PredictorResult Predictor::get_result_for_broadcast() const {
 
 inline void Predictor::set_instruction(PredictorInstruction instruction) {
   current_instruction = instruction;
+  busy = true;
 }
 
 inline bool Predictor::predict() const {
-  return state == State::STRONG_TAKEN || state == State::WEAK_TAKEN;
+  return true;
 }
 
 inline bool Predictor::is_prediction_correct() const {
@@ -192,10 +162,14 @@ inline void Predictor::tick() {
     new_result.target_pc = calculate_target_pc();
     new_result.is_mispredicted = false;
     new_result.correct_target = new_result.target_pc;
+    new_result.rob_id = current_instruction->rob_id;
 
     // JAL and JALR are always taken
     if (is_unconditional_jump(current_instruction->branch_type)) {
-      new_result.prediction = true;
+      new_result.prediction = false;
+      if (std::holds_alternative<riscv::I_JumpOp>(current_instruction->branch_type)) {
+        new_result.is_mispredicted = true;
+      }
     } else {
       new_result.prediction = predict();
       bool actual_taken = is_prediction_correct();
@@ -203,14 +177,12 @@ inline void Predictor::tick() {
       if (new_result.prediction != actual_taken) {
         new_result.is_mispredicted = true;
         new_result.correct_target = actual_taken ? new_result.target_pc : (new_result.pc + 4);
-        LOG_DEBUG("Branch misprediction detected! Predicted: " + 
+        LOG_WARN("Branch misprediction detected! Predicted: " + 
                   std::to_string(new_result.prediction) + ", Actual: " + std::to_string(actual_taken));
       }
-      
-      update(actual_taken);
     }
     
-    LOG_DEBUG("Predictor calculating: PC=" + to_hex(current_instruction->pc) + 
+    LOG_INFO("Predictor calculating: PC=" + to_hex(current_instruction->pc) + 
               ", imm=" + std::to_string(current_instruction->imm) + 
               ", target=" + to_hex(new_result.target_pc) +
               ", mispredicted=" + std::to_string(new_result.is_mispredicted));
@@ -220,6 +192,7 @@ inline void Predictor::tick() {
   } else {
     next_broadcast_result = std::nullopt;
   }
+  busy = false;
 }
 
 #endif // CORE_PREDICTOR_HPP

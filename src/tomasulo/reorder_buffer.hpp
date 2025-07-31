@@ -13,14 +13,16 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 struct ReorderBufferEntry {
   ReorderBufferEntry() = default;
   ReorderBufferEntry(riscv::DecodedInstruction instr,
                      std::optional<uint32_t> dest_tag, uint32_t id)
       : instr(instr), dest_tag(dest_tag), value(-1), ready(false),
-        exception_flag(false), id(id) {
-    if (!dest_tag.has_value() || dest_tag.value() == 0) {
+        exception_flag(false), id(id), pc(0) {
+    if ((!dest_tag.has_value() || dest_tag.value() == 0) &&
+        !std::holds_alternative<riscv::B_Instruction>(instr)) {
       ready = true;
     } else {
       ready = false;
@@ -28,10 +30,11 @@ struct ReorderBufferEntry {
   }
   riscv::DecodedInstruction instr;
   std::optional<uint32_t> dest_tag;
-  double value;
+  int32_t value;
   bool ready;
   bool exception_flag;
   uint32_t id;
+  uint32_t pc;
 };
 
 class ReorderBuffer {
@@ -88,8 +91,6 @@ inline void ReorderBuffer::commit(uint32_t &pc) {
   const auto &ent = rob.front();
 
   mem.commit_memory(ent.id);
-  LOG_DEBUG("Signaled LSB to execute STORE for ROB ID: " +
-            std::to_string(ent.id));
 
   if (ent.ready) {
     LOG_DEBUG("Committing instruction with ROB ID: " + std::to_string(ent.id));
@@ -117,32 +118,19 @@ inline void ReorderBuffer::commit(uint32_t &pc) {
 
         throw ProgramTerminationException(static_cast<int>(original_a0_value));
       }
+    }
 
-      std::optional<PredictorResult> predictor_result;
-      if (predictor.has_result_for_broadcast()) {
-        predictor_result = predictor.get_result_for_broadcast();
-        LOG_DEBUG("Received Predictor broadcast for PC update - target=" +
-                  std::to_string(predictor_result->target_pc) + " (" +
-                  std::to_string(predictor_result->target_pc) +
-                  " decimal), prediction=" +
-                  std::to_string(predictor_result->prediction) +
-                  ", mispredicted=" +
-                  std::to_string(predictor_result->is_mispredicted));
+    if (ent.exception_flag) {
+      LOG_WARN("Branch misprediction detected! Flushing pipeline and "
+               "correcting PC");
 
-        // misprediction recovery
-        if (predictor_result->is_mispredicted) {
-          LOG_WARN("Branch misprediction detected! Flushing pipeline and "
-                   "correcting PC");
-
-          // Flush
-          flush();
-          rs.flush();
-
-          pc = predictor_result->correct_target;
-        }
-      } else {
-        LOG_DEBUG("No predictor broadcast available");
-      }
+      // Flush
+      flush();
+      rs.flush();
+      mem.flush();
+      pc = ent.pc;
+    } else {
+      LOG_DEBUG("No predictor broadcast available");
     }
 
     if (ent.dest_tag.has_value()) {
@@ -193,12 +181,22 @@ inline void ReorderBuffer::receive_broadcast() {
       ReorderBufferEntry &ent = rob.get(i);
       if (result.dest_tag.has_value() && ent.id == result.dest_tag.value()) {
         ent.value = result.pc;
+        ent.pc = result.correct_target;
         ent.ready = true;
         rs.receive_broadcast(result.pc, result.dest_tag.value());
-
+        ent.exception_flag = result.is_mispredicted;
+        // ent.value = result.correct_target;
         LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) +
                   " with Predictor result (return addr: " +
                   std::to_string(result.pc) + ")");
+        broadcasts_received++;
+      } else if (ent.id == result.rob_id) {
+        // B type
+        ent.ready = true;
+        ent.exception_flag = result.is_mispredicted;
+        ent.pc = result.correct_target;
+        LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) +
+                  " as ready based on Predictor result");
         broadcasts_received++;
       }
     }

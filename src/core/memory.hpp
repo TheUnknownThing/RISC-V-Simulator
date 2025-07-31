@@ -4,7 +4,6 @@
 #include "utils/logger.hpp"
 #include <cstdint>
 #include <optional>
-#include <queue>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -120,8 +119,7 @@ inline MemoryResult LSB::get_result_for_broadcast() const {
 
 inline void LSB::commit_memory(uint32_t rob_id) {
   for (auto &entry : lsb_entries) {
-    if (entry.instruction.rob_id <= rob_id &&
-        entry.instruction.op_type == LSBOpType::STORE) {
+    if (entry.instruction.rob_id <= rob_id) {
       entry.committed = true;
       LOG_DEBUG("Committed STORE instruction for ROB ID: " + std::to_string(rob_id));
       break;
@@ -199,11 +197,23 @@ inline void LSB::tick() {
 }
 
 inline void LSB::flush() {
-  LOG_DEBUG("Flushing LSB - clearing all entries");
-  lsb_entries.clear();
-  broadcast_result = std::nullopt;
-  next_broadcast_result = std::nullopt;
-  busy = false;
+  LOG_DEBUG("Flushing LSB - removing non-committed entries");
+  
+  // Remove only non-committed entries, keep committed ones that are executing
+  auto it = lsb_entries.begin();
+  while (it != lsb_entries.end()) {
+    if (!it->committed) {
+      it = lsb_entries.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  
+  // Clear broadcast results only if no committed instructions remain
+  if (lsb_entries.empty()) {
+    broadcast_result = std::nullopt;
+    next_broadcast_result = std::nullopt;
+    busy = false;
+  }
 }
-
 #endif // CORE_MEMORY_HPP
