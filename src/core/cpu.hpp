@@ -88,7 +88,7 @@ inline int CPU::run() {
 
       Tick();
 
-      if (cycle_count > 1000) {
+      if (cycle_count > 2000000000) {
         LOG_WARN("Cycle limit reached, terminating execution");
         return reg_file.read(10); // Return value from a0 register
       }
@@ -279,7 +279,7 @@ inline void CPU::execute() {
                 // I_LoadOp, S_instruction
       if (std::holds_alternative<riscv::S_Instruction>(ent.op)) {
         LSBInstruction instruction;
-        instruction.op_type = LSBOpType::STORE;
+        instruction.op_type = std::get<riscv::S_Instruction>(ent.op).op;
         instruction.address = ent.vj;
         instruction.data = ent.vk;
         instruction.imm = ent.imm;
@@ -290,7 +290,7 @@ inline void CPU::execute() {
       } else if (auto *i_instr = std::get_if<riscv::I_Instruction>(&ent.op)) {
         if (std::holds_alternative<riscv::I_LoadOp>(i_instr->op)) {
           LSBInstruction instruction;
-          instruction.op_type = LSBOpType::LOAD;
+          instruction.op_type = std::get<riscv::I_LoadOp>(i_instr->op);
           instruction.address = ent.vj;
           instruction.imm = ent.imm;
           instruction.can_execute = false;
@@ -327,7 +327,7 @@ inline void CPU::execute() {
                   std::to_string(ent.dest_tag) +
                   ", rob_id=" + std::to_string(ent.dest_tag) + ")");
         LSBInstruction instruction;
-        instruction.op_type = LSBOpType::LOAD;
+        instruction.op_type = std::get<riscv::I_LoadOp>(i_instr->op);
         instruction.address = ent.vj;
         instruction.imm = ent.imm;
         instruction.can_execute = true;
@@ -377,7 +377,7 @@ inline void CPU::execute() {
       LOG_DEBUG("Dispatching S-type store instruction to memory unit (tag=" +
                 std::to_string(ent.dest_tag) + ")");
       LSBInstruction instruction;
-      instruction.op_type = LSBOpType::STORE;
+      instruction.op_type = std::get<riscv::S_Instruction>(ent.op).op;
       instruction.address = ent.vj;
       instruction.data = ent.vk;
       instruction.imm = ent.imm;
