@@ -54,7 +54,6 @@ inline CPU::CPU(std::string filename)
       loader(filename), pc(0) {
   LOG_INFO("CPU initialized with binary file: " + filename);
   
-  // Initialize CPU memory with data from binary loader
   mem.get_memory().initialize_from_loader(loader.get_memory());
   
   LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
@@ -68,7 +67,6 @@ inline CPU::CPU()
   // Load data from stdin
   loader.load_from_stdin();
   
-  // Initialize CPU memory with data from binary loader
   mem.get_memory().initialize_from_loader(loader.get_memory());
   
   LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
@@ -182,17 +180,15 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
 
   int id = rob.add_entry(instr, rd, pc - 4);
   if (id != -1) {
-    // --- THIS IS THE NEW LOGIC ---
     int32_t vj = 0, vk = 0;
     uint32_t qj = std::numeric_limits<uint32_t>::max(), qk = std::numeric_limits<uint32_t>::max();
 
-    // Resolve source operand 1 (rs1)
     if (rs1.has_value()) {
       uint32_t rob_tag = reg_file.get_rob(rs1.value());
-      if (rob_tag == std::numeric_limits<uint32_t>::max()) { // Register is ready
+      if (rob_tag == std::numeric_limits<uint32_t>::max()) {
         vj = reg_file.read(rs1.value());
         LOG_DEBUG("Source operand 1 (rs1) is ready: reg" + std::to_string(rs1.value()) + " = " + std::to_string(vj));
-      } else { // Register is busy, waiting on a ROB result
+      } else {
         qj = rob_tag;
         LOG_DEBUG("Source operand 1 (rs1) is waiting for ROB tag: " + std::to_string(qj));
         // check ROB
@@ -205,16 +201,14 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
       }
     }
 
-    // Resolve source operand 2 (rs2) or use immediate
     if (rs2.has_value()) {
       uint32_t rob_tag = reg_file.get_rob(rs2.value());
       if (rob_tag == std::numeric_limits<uint32_t>::max()) { // Register is ready
         vk = reg_file.read(rs2.value());
         LOG_DEBUG("Source operand 2 (rs2) is ready: reg" + std::to_string(rs2.value()) + " = " + std::to_string(vk));
-      } else { // Register is busy, waiting on a ROB result
+      } else {
         qk = rob_tag;
         LOG_DEBUG("Source operand 2 (rs2) is waiting for ROB tag: " + std::to_string(qk));
-        // check ROB
         auto rob_value = rob.get_value(rob_tag);
         if (rob_value.has_value()) {
           vk = rob_value.value();
@@ -223,20 +217,16 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
         }
       }
     } else {
-      // If rs2 is not used (e.g., I-type), the immediate acts as the second ALU operand.
       vk = imm.value_or(0);
       LOG_DEBUG("Source operand 2 is an immediate value: " + std::to_string(vk));
     }
     
-    // Call the simplified add_entry with resolved values
     rs.add_entry(instr, vj, vk, qj, qk, imm, id, pc - 4);
     LOG_DEBUG("Added entry to Reservation Station");
-    // --- END OF NEW LOGIC ---
 
     // check prediction instruction
     // B
     if (std::holds_alternative<riscv::B_Instruction>(instr)) {
-      // pc = pred.calculate_target_pc();
       pc += std::get<riscv::B_Instruction>(instr).imm;
       pc -= 4; // because we already incremented PC in fetch
       LOG_DEBUG("Branch instruction, updated PC to: " + to_hex(pc));
@@ -356,13 +346,13 @@ inline void CPU::execute() {
           LOG_DEBUG("Dispatching I-type jump instruction to predictor (tag=" +
                     std::to_string(ent.dest_tag) + ")");
           PredictorInstruction instruction;
-          instruction.pc = ent.pc; // PC where this instruction was fetched from
+          instruction.pc = ent.pc;
           instruction.rs1 =
-              ent.vj; // This should be the value of the source register
+              ent.vj;
           instruction.rs2 = 0; // JALR doesn't use rs2
           instruction.dest_tag = ent.dest_tag;
-          instruction.imm = ent.imm; // For JALR, imm is in the ent.imm field
-          instruction.rob_id = ent.dest_tag; // Use the ROB ID for tracking
+          instruction.imm = ent.imm;
+          instruction.rob_id = ent.dest_tag;
           instruction.branch_type = std::get<riscv::I_JumpOp>(i_instr->op);
           LOG_DEBUG("JALR: rs1_val=" + std::to_string(instruction.rs1) +
                     ", imm=" + std::to_string(instruction.imm));
@@ -392,12 +382,12 @@ inline void CPU::execute() {
         LOG_DEBUG("Dispatching B-type branch instruction to predictor (tag=" +
                   std::to_string(ent.dest_tag) + ")");
         PredictorInstruction instruction;
-        instruction.pc = ent.pc; // PC where this instruction was fetched from
+        instruction.pc = ent.pc;
         instruction.rs1 = ent.vj;
         instruction.rs2 = ent.vk;
         instruction.dest_tag = std::nullopt;
         instruction.imm = ent.imm;
-        instruction.rob_id = ent.dest_tag; // Use the ROB ID for tracking
+        instruction.rob_id = ent.dest_tag;
         instruction.branch_type = std::get<riscv::B_Instruction>(ent.op).op;
         pred.set_instruction(instruction);
         dispatched = true;
@@ -425,13 +415,13 @@ inline void CPU::execute() {
         LOG_DEBUG("Dispatching J-type jump instruction to predictor (tag=" +
                   std::to_string(ent.dest_tag) + ")");
         PredictorInstruction instruction;
-        instruction.pc = ent.pc; // PC where this instruction was fetched from
-        instruction.rs1 = 0;     // JAL doesn't use rs1
-        instruction.rs2 = 0;     // JAL doesn't use rs2
+        instruction.pc = ent.pc;
+        instruction.rs1 = 0;
+        instruction.rs2 = 0;
         instruction.dest_tag = ent.dest_tag;
-        instruction.rob_id = ent.dest_tag; // Use the ROB ID for tracking
+        instruction.rob_id = ent.dest_tag;
         instruction.imm =
-            ent.imm; // Use the immediate from the reservation station
+            ent.imm;
         instruction.branch_type = std::get<riscv::J_Instruction>(ent.op).op;
         LOG_DEBUG("JAL: pc=" + std::to_string(instruction.pc) +
                   ", imm=" + std::to_string(instruction.imm));

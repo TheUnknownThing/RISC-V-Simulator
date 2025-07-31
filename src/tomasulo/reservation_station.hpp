@@ -26,7 +26,6 @@ class ReservationStation {
 public:
   CircularQueue<ReservationStationEntry> rs;
   ReservationStation(RegisterFile &reg_file);
-  // The signature is updated to accept resolved operands and tags
   void add_entry(const riscv::DecodedInstruction &op, int32_t vj, int32_t vk, uint32_t qj, uint32_t qk, std::optional<int32_t> imm, int dest_tag, uint32_t pc = 0);
   void receive_broadcast(int32_t value, uint32_t dest_tag);
   void flush();
@@ -37,12 +36,10 @@ inline ReservationStation::ReservationStation(RegisterFile &reg_file) : reg_file
   LOG_DEBUG("ReservationStation initialized with capacity: 32");
 }
 
-// The implementation is simplified to just enqueue the provided data
 inline void ReservationStation::add_entry(const riscv::DecodedInstruction &op, int32_t vj, int32_t vk, uint32_t qj, uint32_t qk, std::optional<int32_t> imm, int dest_tag, uint32_t pc) {
   if (!rs.isFull()) {
     LOG_DEBUG("Adding pre-processed entry to Reservation Station with dest_tag: " + std::to_string(dest_tag));
     
-    // Create the entry directly with the provided, resolved values.
     ReservationStationEntry ent(op, qj, qk, vj, vk, imm.value_or(0), dest_tag, pc);
     
     rs.enqueue(ent);

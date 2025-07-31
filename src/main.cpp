@@ -1,22 +1,20 @@
 #include <cstdio>
 // #define LOGGING_LEVEL_INFO
 // #define LOGGING_LEVEL_DEBUG
-// #define LOGGING_LEVEL_NONE
+#define LOGGING_LEVEL_NONE
 #include "core/cpu.hpp"
 #include "utils/logger.hpp"
 #include <iostream>
 
 int main() {
-  freopen("../logs/simulator.log", "w", stderr);
-
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
   std::cout.tie(nullptr);
 
   LOG_INFO("RISC-V Simulator starting...");
 
-  CPU cpu;
-  // CPU cpu("../testcases/hanoi.data");
+  // CPU cpu;
+  CPU cpu("../testcases/hanoi.data");
 
   LOG_INFO("Starting CPU execution");
   int result = cpu.run();
