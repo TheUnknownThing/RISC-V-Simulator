@@ -13,8 +13,8 @@ int main() {
 
   LOG_INFO("RISC-V Simulator starting...");
 
-  // CPU cpu;
-  CPU cpu("../testcases/hanoi.data");
+  CPU cpu;
+  // CPU cpu("../testcases/hanoi.data");
 
   LOG_INFO("Starting CPU execution");
   int result = cpu.run();
