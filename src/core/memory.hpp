@@ -208,6 +208,7 @@ inline void LSB::tick() {
     if (!entry.instruction.can_execute && !entry.executing) {
       LOG_DEBUG("Instruction with ROB ID " + std::to_string(entry.instruction.rob_id) + 
                 " cannot execute, blocking all subsequent instructions");
+                busy = !lsb_entries.empty();
       return;
     }
 
@@ -244,11 +245,8 @@ inline void LSB::tick() {
 
         next_broadcast_result = result;
         lsb_entries.erase(lsb_entries.begin()); // Remove completed instruction
-        return; // Only process one instruction per tick
       }
     }
-  
-
   busy = !lsb_entries.empty();
 }
 
