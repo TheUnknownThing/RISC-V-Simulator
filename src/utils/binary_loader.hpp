@@ -49,6 +49,14 @@ public:
     }
   }
 
+  /**
+   * @brief Gets a reference to the loaded memory data.
+   * @return Const reference to the memory map.
+   */
+  const std::map<uint32_t, uint8_t>& get_memory() const {
+    return memory;
+  }
+
 private:
   std::map<uint32_t, uint8_t> memory;
 

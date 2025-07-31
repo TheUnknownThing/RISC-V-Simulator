@@ -3,6 +3,7 @@
 
 #include "utils/logger.hpp"
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <unordered_map>
@@ -37,11 +38,14 @@ struct MemoryResult {
 };
 
 class Memory {
-  std::unordered_map<uint32_t, int32_t> memory_data;
+  std::unordered_map<uint32_t, uint8_t> memory_data;
 
 public:
   int32_t read(uint32_t address) const;
   void write(uint32_t address, int32_t data);
+  void write_byte(uint32_t address, uint8_t data);
+  uint8_t read_byte(uint32_t address) const;
+  void initialize_from_loader(const std::map<uint32_t, uint8_t>& loader_memory);
 };
 
 class LSB {
@@ -65,16 +69,42 @@ public:
 
   bool is_available() const;
   void flush();
+  Memory& get_memory();
 };
 
 // Memory implementation
 inline int32_t Memory::read(uint32_t address) const {
+  // Read 4 bytes and combine them into a 32-bit value (little-endian)
+  uint8_t byte0 = read_byte(address);
+  uint8_t byte1 = read_byte(address + 1);
+  uint8_t byte2 = read_byte(address + 2);
+  uint8_t byte3 = read_byte(address + 3);
+  return static_cast<int32_t>(byte0 | (byte1 << 8) | (byte2 << 16) | (byte3 << 24));
+}
+
+inline void Memory::write(uint32_t address, int32_t data) {
+  // Write 32-bit value as 4 bytes (little-endian)
+  write_byte(address, static_cast<uint8_t>(data & 0xFF));
+  write_byte(address + 1, static_cast<uint8_t>((data >> 8) & 0xFF));
+  write_byte(address + 2, static_cast<uint8_t>((data >> 16) & 0xFF));
+  write_byte(address + 3, static_cast<uint8_t>((data >> 24) & 0xFF));
+}
+
+inline uint8_t Memory::read_byte(uint32_t address) const {
   auto it = memory_data.find(address);
   return (it != memory_data.end()) ? it->second : 0;
 }
 
-inline void Memory::write(uint32_t address, int32_t data) {
+inline void Memory::write_byte(uint32_t address, uint8_t data) {
   memory_data[address] = data;
+}
+
+inline void Memory::initialize_from_loader(const std::map<uint32_t, uint8_t>& loader_memory) {
+  memory_data.clear();
+  for (const auto& entry : loader_memory) {
+    memory_data[entry.first] = entry.second;
+  }
+  LOG_INFO("Memory initialized with " + std::to_string(loader_memory.size()) + " bytes from binary loader");
 }
 
 // LSB implementation
@@ -193,6 +223,10 @@ inline void LSB::tick() {
   }
 
   busy = !lsb_entries.empty();
+}
+
+inline Memory& LSB::get_memory() {
+  return memory;
 }
 
 inline void LSB::flush() {
