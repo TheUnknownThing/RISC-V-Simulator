@@ -47,7 +47,7 @@ class ReorderBuffer {
   Predictor &predictor;
   LSB &mem;
   ReservationStation &rs;
-  // norb::RegisterDumper<32> reg_dumper;
+  norb::RegisterDumper<32> reg_dumper;
 
 public:
   ReorderBuffer(RegisterFile &reg_file, ALU &alu, Predictor &predictor,
@@ -67,7 +67,7 @@ inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu,
                                     ReservationStation &rs)
     : rob(32), reg_file(reg_file), alu(alu), predictor(predictor), mem(mem),
       rs(rs)
-      // , reg_dumper("register_dump.txt") 
+      , reg_dumper("register_dump.txt") 
       {
   LOG_DEBUG("ReorderBuffer initialized with capacity: 32");
 }
@@ -156,7 +156,7 @@ inline void ReorderBuffer::commit(uint32_t &pc) {
     for (size_t i = 0; i < 32; ++i) {
       reg_snapshot[i] = static_cast<uint32_t>(reg_file.read(i));
     }
-    // reg_dumper.dump(ent.instruction_pc, reg_snapshot);
+    reg_dumper.dump(ent.instruction_pc, reg_snapshot);
     
     rob.dequeue();
     LOG_DEBUG("Instruction committed and removed from ROB");
