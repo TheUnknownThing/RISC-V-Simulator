@@ -7,7 +7,7 @@
 #include <iostream>
 
 int main() {
-  // freopen("../logs/simulator.log", "w", stderr);
+  freopen("../logs/simulator.log", "w", stderr);
 
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);

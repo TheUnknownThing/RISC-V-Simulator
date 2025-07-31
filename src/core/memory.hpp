@@ -17,6 +17,7 @@ struct LSBInstruction {
   int32_t imm; // Immediate offset for address calculation
   uint32_t dest_tag;
   uint32_t rob_id;
+  bool can_execute;
 };
 
 struct LSBEntry {
@@ -117,6 +118,27 @@ constexpr size_t LSB_SIZE = 32;
 inline bool LSB::is_full() const { return lsb_entries.size() >= LSB_SIZE; }
 
 inline void LSB::add_instruction(LSBInstruction instruction) {
+  // Check if an entry with the same ROB ID already exists
+  auto existing_it = std::find_if(
+      lsb_entries.begin(), lsb_entries.end(),
+      [&instruction](const LSBEntry &entry) {
+        return entry.instruction.rob_id == instruction.rob_id;
+      });
+  
+  if (existing_it != lsb_entries.end()) {
+    // Update the can_execute field of the existing entry
+    existing_it->instruction.can_execute = instruction.can_execute;
+    existing_it->instruction.address = instruction.address;
+    existing_it->instruction.data = instruction.data;
+    existing_it->instruction.imm = instruction.imm;
+    existing_it->instruction.dest_tag = instruction.dest_tag;
+    LOG_DEBUG("Updated can_execute for existing LSB entry with ROB ID: " + 
+              std::to_string(instruction.rob_id) + " to " + 
+              std::to_string(instruction.can_execute));
+    return;
+  }
+  
+  // If no existing entry found, add new entry
   if (is_full()) {
     throw std::runtime_error("LSB is full");
   }
@@ -169,9 +191,8 @@ inline void LSB::tick() {
   LOG_DEBUG("Memory Unit Executing: " + std::to_string(lsb_entries.size()) +
             " entries in LSB");
 
-  // Process the first entry that can execute
-  for (auto it = lsb_entries.begin(); it != lsb_entries.end(); ++it) {
-    LSBEntry &entry = *it;
+  // Process entries in order, stopping at first non-executable instruction
+    LSBEntry &entry = *lsb_entries.begin();
     uint32_t effective_address = entry.instruction.address + entry.instruction.imm;
 
     LOG_DEBUG(
@@ -180,13 +201,21 @@ inline void LSB::tick() {
         ", effective_addr=" + std::to_string(effective_address) + ", op_type=" +
         (entry.instruction.op_type == LSBOpType::LOAD ? "LOAD" : "STORE") +
         ", committed=" + std::to_string(entry.committed) +
-        ", executing=" + std::to_string(entry.executing));
+        ", executing=" + std::to_string(entry.executing) +
+        ", can_execute=" + std::to_string(entry.instruction.can_execute));
 
-    // Start executing if:
-    // 1. It's a LOAD (can execute during regular tick)
-    // 2. It's a STORE that has been committed
+    // If this instruction cannot execute and is not already executing, block all subsequent instructions
+    if (!entry.instruction.can_execute && !entry.executing) {
+      LOG_DEBUG("Instruction with ROB ID " + std::to_string(entry.instruction.rob_id) + 
+                " cannot execute, blocking all subsequent instructions");
+      return;
+    }
+
+    // Start executing if not already executing
     if (!entry.executing) {
-      bool can_execute = entry.committed;
+      bool can_execute = ((entry.instruction.op_type == LSBOpType::LOAD) ||
+                         (entry.instruction.op_type == LSBOpType::STORE &&
+                          entry.committed)) && entry.instruction.can_execute;
 
       if (can_execute) {
         entry.executing = true;
@@ -214,11 +243,11 @@ inline void LSB::tick() {
         }
 
         next_broadcast_result = result;
-        lsb_entries.erase(it); // Remove completed instruction
-        break; // Only process one instruction per tick
+        lsb_entries.erase(lsb_entries.begin()); // Remove completed instruction
+        return; // Only process one instruction per tick
       }
     }
-  }
+  
 
   busy = !lsb_entries.empty();
 }

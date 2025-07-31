@@ -276,6 +276,29 @@ inline void CPU::execute() {
       LOG_DEBUG("RS entry " + std::to_string(i) + " waiting for operands (qj=" +
                 std::to_string(ent.qj) + ", qk=" + std::to_string(ent.qk) +
                 ") with instruction: " + riscv::to_string(ent.op));
+                // I_LoadOp, S_instruction
+      if (std::holds_alternative<riscv::S_Instruction>(ent.op)) {
+        LSBInstruction instruction;
+        instruction.op_type = LSBOpType::STORE;
+        instruction.address = ent.vj;
+        instruction.data = ent.vk;
+        instruction.imm = ent.imm;
+        instruction.can_execute = false;
+        instruction.dest_tag = ent.dest_tag;
+        instruction.rob_id = ent.dest_tag;
+        mem.add_instruction(instruction);
+      } else if (auto *i_instr = std::get_if<riscv::I_Instruction>(&ent.op)) {
+        if (std::holds_alternative<riscv::I_LoadOp>(i_instr->op)) {
+          LSBInstruction instruction;
+          instruction.op_type = LSBOpType::LOAD;
+          instruction.address = ent.vj;
+          instruction.imm = ent.imm;
+          instruction.can_execute = false;
+          instruction.dest_tag = ent.dest_tag;
+          instruction.rob_id = ent.dest_tag;
+          mem.add_instruction(instruction);
+        }
+      }
       continue;
     }
 
@@ -307,6 +330,7 @@ inline void CPU::execute() {
         instruction.op_type = LSBOpType::LOAD;
         instruction.address = ent.vj;
         instruction.imm = ent.imm;
+        instruction.can_execute = true;
         instruction.dest_tag = ent.dest_tag;
         instruction.rob_id = ent.dest_tag;
         mem.add_instruction(instruction);
@@ -357,6 +381,7 @@ inline void CPU::execute() {
       instruction.address = ent.vj;
       instruction.data = ent.vk;
       instruction.imm = ent.imm;
+      instruction.can_execute = true;
       instruction.dest_tag = ent.dest_tag;
       instruction.rob_id = ent.dest_tag;
       mem.add_instruction(instruction);
