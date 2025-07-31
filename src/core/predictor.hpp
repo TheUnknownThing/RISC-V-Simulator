@@ -53,6 +53,7 @@ public:
   void tick();
   bool is_prediction_correct() const;
   uint32_t calculate_target_pc() const;
+  void flush();
 
 private:
   bool predict() const;
@@ -192,6 +193,14 @@ inline void Predictor::tick() {
   } else {
     next_broadcast_result = std::nullopt;
   }
+  busy = false;
+}
+
+inline void Predictor::flush() {
+  LOG_DEBUG("Flushing Predictor - clearing current instruction and results");
+  current_instruction = std::nullopt;
+  broadcast_result = std::nullopt;
+  next_broadcast_result = std::nullopt;
   busy = false;
 }
 

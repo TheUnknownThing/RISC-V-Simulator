@@ -21,7 +21,7 @@ struct ReorderBufferEntry {
                      std::optional<uint32_t> dest_tag, uint32_t id)
       : instr(instr), dest_tag(dest_tag), value(-1), ready(false),
         exception_flag(false), id(id), pc(0) {
-    if ((!dest_tag.has_value() || dest_tag.value() == 0) &&
+    if ((!dest_tag.has_value()) &&
         !std::holds_alternative<riscv::B_Instruction>(instr)) {
       ready = true;
     } else {
@@ -128,6 +128,7 @@ inline void ReorderBuffer::commit(uint32_t &pc) {
       flush();
       rs.flush();
       mem.flush();
+      predictor.flush();
       pc = ent.pc;
     } else {
       LOG_DEBUG("No predictor broadcast available");
