@@ -1,7 +1,7 @@
 #include <cstdio>
 // #define LOGGING_LEVEL_INFO
-// #define LOGGING_LEVEL_DEBUG
-#define LOGGING_LEVEL_NONE
+#define LOGGING_LEVEL_DEBUG
+// #define LOGGING_LEVEL_NONE
 #include "core/cpu.hpp"
 #include "utils/logger.hpp"
 #include <iostream>
@@ -15,8 +15,8 @@ int main() {
 
   LOG_INFO("RISC-V Simulator starting...");
 
-  CPU cpu;
-  // CPU cpu("../testcases/multiarray.data");
+  // CPU cpu;
+  CPU cpu("../testcases/hanoi.data");
 
   LOG_INFO("Starting CPU execution");
   int result = cpu.run();
