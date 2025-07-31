@@ -24,11 +24,10 @@ public:
 
 
   /**
-   * @brief Constructs a BinaryLoader and loads data from stdin.
+   * @brief Constructs a BinaryLoader that will load data from stdin.
    */
   BinaryLoader() { 
-    LOG_INFO("Loading binary data from stdin");
-    loadFromStdin(); 
+    LOG_INFO("BinaryLoader created for stdin input");
   }
 
 
@@ -65,6 +64,14 @@ public:
    */
   const std::map<uint32_t, uint8_t>& get_memory() const {
     return memory;
+  }
+
+  /**
+   * @brief Loads binary data from stdin.
+   */
+  void load_from_stdin() {
+    LOG_INFO("Loading binary data from stdin");
+    loadFromStdin();
   }
 
 private:

@@ -63,7 +63,14 @@ inline CPU::CPU(std::string filename)
 inline CPU::CPU()
     : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file),
       loader(), pc(0) {
-  LOG_INFO("CPU initialized with binary data from stdin");
+  LOG_INFO("CPU initializing with binary data from stdin");
+  
+  // Load data from stdin
+  loader.load_from_stdin();
+  
+  // Initialize CPU memory with data from binary loader
+  mem.get_memory().initialize_from_loader(loader.get_memory());
+  
   LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
 }
 
