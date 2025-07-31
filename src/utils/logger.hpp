@@ -55,11 +55,11 @@ inline std::string getTimestamp() {
 }
 
 inline void log(Level level, const std::string& message) {
-    if (static_cast<int>(level) <= static_cast<int>(getCurrentLevel())) {
-        std::cerr << "[" << getTimestamp() << "] "
-                  << "[" << getLevelString(level) << "] "
-                  << message << std::endl;
-    }
+    // if (static_cast<int>(level) <= static_cast<int>(getCurrentLevel())) {
+    //     std::cerr << "[" << getTimestamp() << "] "
+    //               << "[" << getLevelString(level) << "] "
+    //               << message << std::endl;
+    // }
 }
 
 inline void error(const std::string& message) {
