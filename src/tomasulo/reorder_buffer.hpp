@@ -55,11 +55,12 @@ public:
 
   int add_entry(riscv::DecodedInstruction instr,
                 std::optional<uint32_t> dest_tag, uint32_t instr_pc);
-  void commit(uint32_t &pc);
+  bool commit(uint32_t &pc);
   void receive_broadcast();
   void flush();
   std::optional<int32_t> get_value(std::optional<uint32_t> rob_id);
   void print_debug_info();
+  bool isFull() const;
 };
 
 inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu,
@@ -88,10 +89,10 @@ inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
   return -1;
 }
 
-inline void ReorderBuffer::commit(uint32_t &pc) {
+inline bool ReorderBuffer::commit(uint32_t &pc) {
   if (rob.isEmpty()) {
     LOG_DEBUG("ROB is empty, nothing to commit");
-    return;
+    return false;
   }
 
   const auto &ent = rob.front();
@@ -160,11 +161,15 @@ inline void ReorderBuffer::commit(uint32_t &pc) {
     
     rob.dequeue();
     LOG_DEBUG("Instruction committed and removed from ROB");
+    
+    return ent.exception_flag;
   } else {
     LOG_DEBUG("Head instruction not ready for commit (ROB ID: " +
               std::to_string(ent.id) +
               "), instruction details: " + riscv::to_string(ent.instr));
   }
+  
+  return false;  // No misprediction if instruction wasn't ready
 }
 
 inline void ReorderBuffer::receive_broadcast() {
@@ -297,6 +302,10 @@ void ReorderBuffer::print_debug_info() {
               std::to_string(ent.id) + ", Value: " + std::to_string(ent.value) +
               ", Ready: " + (ent.ready ? "true" : "false"));
   }
+}
+
+inline bool ReorderBuffer::isFull() const {
+  return rob.isFull();
 }
 
 #endif // TOMASULO_REORDER_BUFFER_HPP

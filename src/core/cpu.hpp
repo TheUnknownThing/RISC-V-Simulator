@@ -16,6 +16,7 @@
 #include <limits>
 #include <sstream>
 #include <variant>
+#include <optional>
 
 class CPU {
   RegisterFile reg_file;
@@ -26,6 +27,10 @@ class CPU {
   LSB mem;
   Predictor pred;
   uint32_t pc;
+  
+  std::optional<riscv::DecodedInstruction> fetched_instruction;
+  uint32_t fetched_pc;
+  bool stall_fetch;
 
   // Helper function for hex formatting
   std::string to_hex(uint32_t value) const {
@@ -51,7 +56,8 @@ private:
 
 inline CPU::CPU(std::string filename)
     : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file),
-      loader(filename), pc(0) {
+      loader(filename), pc(0), fetched_instruction(std::nullopt), 
+      fetched_pc(0), stall_fetch(false) {
   LOG_INFO("CPU initialized with binary file: " + filename);
   
   mem.get_memory().initialize_from_loader(loader.get_memory());
@@ -61,7 +67,8 @@ inline CPU::CPU(std::string filename)
 
 inline CPU::CPU()
     : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file),
-      loader(), pc(0) {
+      loader(), pc(0), fetched_instruction(std::nullopt), 
+      fetched_pc(0), stall_fetch(false) {
   LOG_INFO("CPU initializing with binary data from stdin");
   
   // Load data from stdin
@@ -100,26 +107,46 @@ inline int CPU::run() {
 }
 
 inline void CPU::Tick() {
-  LOG_DEBUG("--- Fetch Stage ---");
-  try {
-    riscv::DecodedInstruction instr = fetch();
-    LOG_INFO("Fetched instruction from pc: " + to_hex(pc - 4));
-    LOG_DEBUG("--- Issue Stage ---");
-    issue(instr);
-  } catch (const std::exception &e) {
-    LOG_WARN("Fetch/Issue stage skipped due to exception: " +
-             std::string(e.what()));
-    pc -= 4;
-  }
-
-  LOG_DEBUG("--- Execute Stage ---");
-  execute();
+  LOG_DEBUG("======================= Beginning parallel cycle =======================");
 
   LOG_DEBUG("--- Broadcast Stage ---");
   broadcast();
-
+  
+  LOG_DEBUG("--- Execute Stage ---");
+  execute();
+  
   LOG_DEBUG("--- Commit Stage ---");
   commit();
+  
+  if (!stall_fetch && !rob.isFull()) {
+    LOG_DEBUG("--- Fetch Stage ---");
+    try {
+      if (!fetched_instruction.has_value()) {
+        fetched_pc = pc;
+        riscv::DecodedInstruction instr = fetch();
+        fetched_instruction = instr;
+        LOG_INFO("Fetched instruction from pc: " + to_hex(fetched_pc));
+      }
+      
+      if (fetched_instruction.has_value()) {
+        LOG_DEBUG("--- Issue Stage ---");
+        issue(fetched_instruction.value());
+        fetched_instruction = std::nullopt;
+      }
+    } catch (const std::exception &e) {
+      LOG_WARN("Fetch/Issue stage exception: " + std::string(e.what()));
+      pc = fetched_pc;
+      fetched_instruction = std::nullopt;
+    }
+  } else {
+    if (rob.isFull()) {
+      LOG_DEBUG("--- Fetch Stage stalled (ROB full) ---");
+    } else if (stall_fetch) {
+      LOG_DEBUG("--- Fetch Stage stalled (branch misprediction recovery) ---");
+    }
+  }
+  
+  stall_fetch = false;
 }
 
 inline riscv::DecodedInstruction CPU::fetch() {
@@ -459,7 +486,14 @@ inline void CPU::commit() {
   LOG_DEBUG("Committing completed instructions");
   reg_file.print_debug_info();
   rs.print_debug_info();
-  rob.commit(pc);
+  
+  bool mispredicted = rob.commit(pc);
+  if (mispredicted) {
+    LOG_DEBUG("Branch misprediction detected, stalling fetch for next cycle");
+    stall_fetch = true;
+    fetched_instruction = std::nullopt;
+  }
+  
   rob.print_debug_info();
 }
 
