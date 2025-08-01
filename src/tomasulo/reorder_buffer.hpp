@@ -57,6 +57,9 @@ public:
                 std::optional<uint32_t> dest_tag, uint32_t instr_pc);
   bool commit(uint32_t &pc);
   void receive_broadcast();
+  void receive_alu_result(const ALUResult& result);
+  void receive_memory_result(const MemoryResult& result);
+  void receive_predictor_result(const PredictorResult& result);
   void flush();
   std::optional<int32_t> get_value(std::optional<uint32_t> rob_id);
   void print_debug_info();
@@ -247,6 +250,67 @@ inline void ReorderBuffer::receive_broadcast() {
   if (broadcasts_received > 0) {
     LOG_DEBUG("Processed " + std::to_string(broadcasts_received) +
               " broadcasts this cycle");
+  }
+}
+
+inline void ReorderBuffer::receive_alu_result(const ALUResult& result) {
+  LOG_DEBUG("Received ALU broadcast for tag: " + std::to_string(result.dest_tag) +
+            ", result: " + std::to_string(result.result));
+  
+  for (int i = 0; i < rob.size(); i++) {
+    ReorderBufferEntry &ent = rob.get(i);
+    if (ent.id == result.dest_tag) {
+      ent.value = result.result;
+      ent.ready = true;
+      LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) +
+                " with ALU result");
+      break;
+    }
+  }
+}
+
+inline void ReorderBuffer::receive_memory_result(const MemoryResult& result) {
+  // Only LOAD operations update the ROB
+  if (result.is_load()) {
+    LOG_DEBUG("Received Memory broadcast for tag: " +
+              std::to_string(result.dest_tag) +
+              ", data: " + std::to_string(result.data));
+    
+    for (int i = 0; i < rob.size(); i++) {
+      ReorderBufferEntry &ent = rob.get(i);
+      if (ent.id == result.dest_tag) {
+        ent.value = result.data;
+        ent.ready = true;
+        LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) +
+                  " with Memory result");
+        break;
+      }
+    }
+  }
+}
+
+inline void ReorderBuffer::receive_predictor_result(const PredictorResult& result) {
+  LOG_DEBUG("Received Predictor broadcast, mispredicted=" +
+            std::to_string(result.is_mispredicted));
+  
+  for (int i = 0; i < rob.size(); i++) {
+    ReorderBufferEntry &ent = rob.get(i);
+    if (result.dest_tag.has_value() && ent.id == result.dest_tag.value()) {
+      ent.value = result.pc;
+      ent.pc = result.correct_target;
+      ent.ready = true;
+      ent.exception_flag = result.is_mispredicted;
+      LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) +
+                " with Predictor result (return addr: " +
+                std::to_string(result.pc) + ")");
+    } else if (ent.id == result.rob_id) {
+      // B type
+      ent.ready = true;
+      ent.exception_flag = result.is_mispredicted;
+      ent.pc = result.correct_target;
+      LOG_DEBUG("Updated ROB entry ID: " + std::to_string(ent.id) +
+                " as ready based on Predictor result");
+    }
   }
 }
 

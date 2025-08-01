@@ -47,10 +47,10 @@ public:
 private:
   riscv::DecodedInstruction fetch();
   void issue(riscv::DecodedInstruction instr);
-  void execute();
-  void broadcast();
+  void dispatch();
   void commit();
   void Tick();
+  void TickPrioritized();
   void handle_branch_prediction(riscv::DecodedInstruction& instr, uint32_t current_pc);
 };
 
@@ -107,13 +107,34 @@ inline int CPU::run() {
 }
 
 inline void CPU::Tick() {
-  LOG_DEBUG("======================= Beginning parallel cycle =======================");
-
-  LOG_DEBUG("--- Broadcast Stage ---");
-  broadcast();
+  LOG_DEBUG("======================= Beginning parallel cycle =======================");  
   
-  LOG_DEBUG("--- Execute Stage ---");
-  execute();
+  alu.tick();
+  if (mem.has_result_for_broadcast()) {
+    MemoryResult mem_result = mem.get_result_for_broadcast();
+    if (mem_result.is_load()) {
+      rob.receive_memory_result(mem_result);
+      rs.receive_broadcast(mem_result.data, mem_result.dest_tag);
+    }
+  }
+  
+  pred.tick();
+  if (alu.has_result_for_broadcast()) {
+    ALUResult alu_result = alu.get_result_for_broadcast();
+    rob.receive_alu_result(alu_result);
+    rs.receive_broadcast(alu_result.result, alu_result.dest_tag);
+  }
+  
+  mem.tick();
+  if (pred.has_result_for_broadcast()) {
+    PredictorResult pred_result = pred.get_result_for_broadcast();
+    rob.receive_predictor_result(pred_result);
+    if (pred_result.dest_tag.has_value()) {
+      rs.receive_broadcast(pred_result.pc, pred_result.dest_tag.value());
+    }
+  }
+  
+  dispatch();
   
   LOG_DEBUG("--- Commit Stage ---");
   commit();
@@ -281,7 +302,7 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
   }
 }
 
-inline void CPU::execute() {
+inline void CPU::dispatch() {
   LOG_DEBUG("Scanning reservation stations for ready instructions");
   int dispatched_count = 0;
 
@@ -469,17 +490,6 @@ inline void CPU::execute() {
 
   LOG_DEBUG("Dispatched " + std::to_string(dispatched_count) +
             " instructions in this cycle");
-  LOG_DEBUG("Ticking execution units...");
-
-  alu.tick();
-  mem.tick();
-  pred.tick();
-}
-
-inline void CPU::broadcast() {
-  LOG_DEBUG("Broadcasting execution results");
-
-  rob.receive_broadcast();
 }
 
 inline void CPU::commit() {
