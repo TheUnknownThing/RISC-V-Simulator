@@ -64,3 +64,6 @@ testcases/
 sample/
 logs/
 code
+dump/
+
+sample_program/main
