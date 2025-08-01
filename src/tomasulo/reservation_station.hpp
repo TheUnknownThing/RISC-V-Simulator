@@ -29,7 +29,7 @@ public:
   void add_entry(const riscv::DecodedInstruction &op, int32_t vj, int32_t vk, uint32_t qj, uint32_t qk, std::optional<int32_t> imm, int dest_tag, uint32_t pc = 0);
   void receive_broadcast(int32_t value, uint32_t dest_tag);
   void flush();
-  void print_debug_info();
+  // void print_debug_info();
 };
 
 inline ReservationStation::ReservationStation(RegisterFile &reg_file) : reg_file(reg_file), rs(32) {
@@ -91,18 +91,18 @@ inline void ReservationStation::flush() {
   LOG_DEBUG("Reservation Station flush completed");
 }
 
-inline void ReservationStation::print_debug_info() {
-  LOG_DEBUG("Reservation Station Debug Info:");
-  for (int i = 0; i < rs.size(); ++i) {
-    const ReservationStationEntry &ent = rs.get(i);
-    LOG_DEBUG("RS[" + std::to_string(i) + "] - op: " + riscv::to_string(ent.op) +
-              ", vj: " + std::to_string(ent.vj) +
-              ", vk: " + std::to_string(ent.vk) +
-              ", qj: " + std::to_string(ent.qj) +
-              ", qk: " + std::to_string(ent.qk) +
-              ", imm: " + std::to_string(ent.imm) +
-              ", dest_tag: " + std::to_string(ent.dest_tag));
-  }
-}
+// inline void ReservationStation::print_debug_info() {
+//   LOG_DEBUG("Reservation Station Debug Info:");
+//   for (int i = 0; i < rs.size(); ++i) {
+//     const ReservationStationEntry &ent = rs.get(i);
+//     LOG_DEBUG("RS[" + std::to_string(i) + "] - op: " + riscv::to_string(ent.op) +
+//               ", vj: " + std::to_string(ent.vj) +
+//               ", vk: " + std::to_string(ent.vk) +
+//               ", qj: " + std::to_string(ent.qj) +
+//               ", qk: " + std::to_string(ent.qk) +
+//               ", imm: " + std::to_string(ent.imm) +
+//               ", dest_tag: " + std::to_string(ent.dest_tag));
+//   }
+// }
 
 #endif // TOMASULO_RESERVATION_STATION_HPP

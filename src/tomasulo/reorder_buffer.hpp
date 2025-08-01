@@ -62,7 +62,7 @@ public:
   void receive_predictor_result(const PredictorResult& result);
   void flush();
   std::optional<int32_t> get_value(std::optional<uint32_t> rob_id);
-  void print_debug_info();
+  // void print_debug_info();
   bool isFull() const;
 };
 
@@ -358,15 +358,15 @@ ReorderBuffer::get_value(std::optional<uint32_t> rob_id) {
   return std::nullopt;
 }
 
-void ReorderBuffer::print_debug_info() {
-  LOG_DEBUG("Reorder Buffer Debug Info:");
-  for (int i = 0; i < rob.size(); i++) {
-    const auto &ent = rob.get(i);
-    LOG_DEBUG("  Entry " + std::to_string(i) + ": " + "ID: " +
-              std::to_string(ent.id) + ", Value: " + std::to_string(ent.value) +
-              ", Ready: " + (ent.ready ? "true" : "false"));
-  }
-}
+// void ReorderBuffer::print_debug_info() {
+//   LOG_DEBUG("Reorder Buffer Debug Info:");
+//   for (int i = 0; i < rob.size(); i++) {
+//     const auto &ent = rob.get(i);
+//     LOG_DEBUG("  Entry " + std::to_string(i) + ": " + "ID: " +
+//               std::to_string(ent.id) + ", Value: " + std::to_string(ent.value) +
+//               ", Ready: " + (ent.ready ? "true" : "false"));
+//   }
+// }
 
 inline bool ReorderBuffer::isFull() const {
   return rob.isFull();

@@ -15,7 +15,7 @@ public:
   void receive_rob(uint32_t rd, uint32_t id);
   void mark_available(uint32_t rd);
   uint32_t get_rob(uint32_t rd) const;
-  void print_debug_info() const;
+  // void print_debug_info() const;
 
   std::array<int32_t, 32> registers;
 private:
@@ -63,12 +63,12 @@ inline void RegisterFile::flush() {
   rob_id.fill(std::numeric_limits<uint32_t>::max());
 }
 
-inline void RegisterFile::print_debug_info() const {
-  LOG_DEBUG("Register File Debug Info:");
-  for (size_t i = 0; i < registers.size(); ++i) {
-    LOG_DEBUG("reg[" + std::to_string(i) + "] = " + std::to_string(registers[i]) +
-              ", ROB ID: " + std::to_string(rob_id[i]));
-  }
-}
+// inline void RegisterFile::print_debug_info() const {
+//   LOG_DEBUG("Register File Debug Info:");
+//   for (size_t i = 0; i < registers.size(); ++i) {
+//     LOG_DEBUG("reg[" + std::to_string(i) + "] = " + std::to_string(registers[i]) +
+//               ", ROB ID: " + std::to_string(rob_id[i]));
+//   }
+// }
 
 #endif // CORE_REGISTER_FILE_HPP

@@ -494,8 +494,8 @@ inline void CPU::dispatch() {
 
 inline void CPU::commit() {
   LOG_DEBUG("Committing completed instructions");
-  reg_file.print_debug_info();
-  rs.print_debug_info();
+  // reg_file.print_debug_info();
+  // rs.print_debug_info();
   
   bool mispredicted = rob.commit(pc);
   if (mispredicted) {
@@ -504,7 +504,7 @@ inline void CPU::commit() {
     fetched_instruction = std::nullopt;
   }
   
-  rob.print_debug_info();
+  // rob.print_debug_info();
 }
 
 #endif // CORE_CPU_HPP
