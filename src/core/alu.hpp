@@ -41,8 +41,7 @@ private:
 
 inline ALU::ALU()
     : current_instruction(std::nullopt), broadcast_result(std::nullopt),
-      next_broadcast_result(std::nullopt),
-      busy(false) {}
+      next_broadcast_result(std::nullopt), busy(false) {}
 
 inline bool ALU::is_available() const { return !busy; }
 

@@ -4,8 +4,6 @@
 #include <cstdint>
 #include <iostream>
 #include <map>
-#include <stdexcept>
-#include <vector>
 
 #include "dump.hpp"
 

@@ -9,7 +9,6 @@
 #include "../utils/exceptions.hpp"
 #include "../utils/logger.hpp"
 #include "../utils/queue.hpp"
-#include "../utils/dump.hpp"
 #include "reservation_station.hpp"
 #include <array>
 #include <cstdint>
@@ -36,7 +35,8 @@ struct ReorderBufferEntry {
   bool exception_flag;
   uint32_t id;
   uint32_t pc;
-  uint32_t instruction_pc; // PC where this instruction was fetched from, for debug
+  uint32_t
+      instruction_pc; // PC where this instruction was fetched from, for debug
 };
 
 class ReorderBuffer {
@@ -57,9 +57,9 @@ public:
                 std::optional<uint32_t> dest_tag, uint32_t instr_pc);
   bool commit(uint32_t &pc);
   void receive_broadcast();
-  void receive_alu_result(const ALUResult& result);
-  void receive_memory_result(const MemoryResult& result);
-  void receive_predictor_result(const PredictorResult& result);
+  void receive_alu_result(const ALUResult &result);
+  void receive_memory_result(const MemoryResult &result);
+  void receive_predictor_result(const PredictorResult &result);
   void flush();
   std::optional<int32_t> get_value(std::optional<uint32_t> rob_id);
   // void print_debug_info();
@@ -71,13 +71,14 @@ inline ReorderBuffer::ReorderBuffer(RegisterFile &reg_file, ALU &alu,
                                     ReservationStation &rs)
     : rob(32), reg_file(reg_file), alu(alu), predictor(predictor), mem(mem),
       rs(rs)
-      // , reg_dumper("register_dump.txt") 
-      {
+// , reg_dumper("register_dump.txt")
+{
   LOG_DEBUG("ReorderBuffer initialized with capacity: 32");
 }
 
 inline int ReorderBuffer::add_entry(riscv::DecodedInstruction instr,
-                                    std::optional<uint32_t> dest_tag, uint32_t instr_pc) {
+                                    std::optional<uint32_t> dest_tag,
+                                    uint32_t instr_pc) {
   if (!rob.isFull()) {
     ReorderBufferEntry ent(instr, dest_tag, cur_id++);
     ent.instruction_pc = instr_pc;
@@ -154,25 +155,25 @@ inline bool ReorderBuffer::commit(uint32_t &pc) {
                   " as available");
       }
     }
-    
+
     // Dump register file contents after commit
     std::array<uint32_t, 32> reg_snapshot;
     for (size_t i = 0; i < 32; ++i) {
       reg_snapshot[i] = static_cast<uint32_t>(reg_file.read(i));
     }
     // reg_dumper.dump(ent.instruction_pc, reg_snapshot);
-    
+
     rob.dequeue();
     LOG_DEBUG("Instruction committed and removed from ROB");
-    
+
     return ent.exception_flag;
   } else {
     LOG_DEBUG("Head instruction not ready for commit (ROB ID: " +
               std::to_string(ent.id) +
               "), instruction details: " + riscv::to_string(ent.instr));
   }
-  
-  return false;  // No misprediction if instruction wasn't ready
+
+  return false; // No misprediction if instruction wasn't ready
 }
 
 inline void ReorderBuffer::receive_broadcast() {
@@ -253,10 +254,11 @@ inline void ReorderBuffer::receive_broadcast() {
   }
 }
 
-inline void ReorderBuffer::receive_alu_result(const ALUResult& result) {
-  LOG_DEBUG("Received ALU broadcast for tag: " + std::to_string(result.dest_tag) +
-            ", result: " + std::to_string(result.result));
-  
+inline void ReorderBuffer::receive_alu_result(const ALUResult &result) {
+  LOG_DEBUG(
+      "Received ALU broadcast for tag: " + std::to_string(result.dest_tag) +
+      ", result: " + std::to_string(result.result));
+
   for (int i = 0; i < rob.size(); i++) {
     ReorderBufferEntry &ent = rob.get(i);
     if (ent.id == result.dest_tag) {
@@ -269,13 +271,13 @@ inline void ReorderBuffer::receive_alu_result(const ALUResult& result) {
   }
 }
 
-inline void ReorderBuffer::receive_memory_result(const MemoryResult& result) {
+inline void ReorderBuffer::receive_memory_result(const MemoryResult &result) {
   // Only LOAD operations update the ROB
   if (result.is_load()) {
     LOG_DEBUG("Received Memory broadcast for tag: " +
               std::to_string(result.dest_tag) +
               ", data: " + std::to_string(result.data));
-    
+
     for (int i = 0; i < rob.size(); i++) {
       ReorderBufferEntry &ent = rob.get(i);
       if (ent.id == result.dest_tag) {
@@ -289,10 +291,11 @@ inline void ReorderBuffer::receive_memory_result(const MemoryResult& result) {
   }
 }
 
-inline void ReorderBuffer::receive_predictor_result(const PredictorResult& result) {
+inline void
+ReorderBuffer::receive_predictor_result(const PredictorResult &result) {
   LOG_DEBUG("Received Predictor broadcast, mispredicted=" +
             std::to_string(result.is_mispredicted));
-  
+
   for (int i = 0; i < rob.size(); i++) {
     ReorderBufferEntry &ent = rob.get(i);
     if (result.dest_tag.has_value() && ent.id == result.dest_tag.value()) {
@@ -363,13 +366,12 @@ ReorderBuffer::get_value(std::optional<uint32_t> rob_id) {
 //   for (int i = 0; i < rob.size(); i++) {
 //     const auto &ent = rob.get(i);
 //     LOG_DEBUG("  Entry " + std::to_string(i) + ": " + "ID: " +
-//               std::to_string(ent.id) + ", Value: " + std::to_string(ent.value) +
+//               std::to_string(ent.id) + ", Value: " +
+//               std::to_string(ent.value) +
 //               ", Ready: " + (ent.ready ? "true" : "false"));
 //   }
 // }
 
-inline bool ReorderBuffer::isFull() const {
-  return rob.isFull();
-}
+inline bool ReorderBuffer::isFull() const { return rob.isFull(); }
 
 #endif // TOMASULO_REORDER_BUFFER_HPP

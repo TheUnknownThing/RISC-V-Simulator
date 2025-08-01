@@ -14,9 +14,9 @@
 #include "riscv/instruction.hpp"
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <variant>
-#include <optional>
 
 class CPU {
   RegisterFile reg_file;
@@ -27,7 +27,7 @@ class CPU {
   LSB mem;
   Predictor pred;
   uint32_t pc;
-  
+
   std::optional<riscv::DecodedInstruction> fetched_instruction;
   uint32_t fetched_pc;
   bool stall_fetch;
@@ -51,34 +51,33 @@ private:
   void commit();
   void Tick();
   void TickPrioritized();
-  void handle_branch_prediction(riscv::DecodedInstruction& instr, uint32_t current_pc);
+  void handle_branch_prediction(riscv::DecodedInstruction &instr,
+                                uint32_t current_pc);
 };
 
 inline CPU::CPU(std::string filename)
-    : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file),
-      loader(filename), pc(0), fetched_instruction(std::nullopt), 
-      fetched_pc(0), stall_fetch(false) {
+    : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(), loader(filename),
+      pc(0), fetched_instruction(std::nullopt), fetched_pc(0),
+      stall_fetch(false) {
   LOG_INFO("CPU initialized with binary file: " + filename);
-  
+
   mem.get_memory().initialize_from_loader(loader.get_memory());
-  
+
   LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
 }
 
 inline CPU::CPU()
-    : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(reg_file),
-      loader(), pc(0), fetched_instruction(std::nullopt), 
-      fetched_pc(0), stall_fetch(false) {
+    : reg_file(), rob(reg_file, alu, pred, mem, rs), rs(), loader(), pc(0),
+      fetched_instruction(std::nullopt), fetched_pc(0), stall_fetch(false) {
   LOG_INFO("CPU initializing with binary data from stdin");
-  
+
   // Load data from stdin
   loader.load_from_stdin();
-  
+
   mem.get_memory().initialize_from_loader(loader.get_memory());
-  
+
   LOG_DEBUG("Initial PC: 0x" + std::to_string(pc));
 }
-
 
 inline int CPU::run() {
   LOG_INFO("Starting CPU execution loop");
@@ -107,8 +106,9 @@ inline int CPU::run() {
 }
 
 inline void CPU::Tick() {
-  LOG_DEBUG("======================= Beginning parallel cycle =======================");  
-  
+  LOG_DEBUG("======================= Beginning parallel cycle "
+            "=======================");
+
   alu.tick();
   if (mem.has_result_for_broadcast()) {
     MemoryResult mem_result = mem.get_result_for_broadcast();
@@ -117,14 +117,14 @@ inline void CPU::Tick() {
       rs.receive_broadcast(mem_result.data, mem_result.dest_tag);
     }
   }
-  
+
   pred.tick();
   if (alu.has_result_for_broadcast()) {
     ALUResult alu_result = alu.get_result_for_broadcast();
     rob.receive_alu_result(alu_result);
     rs.receive_broadcast(alu_result.result, alu_result.dest_tag);
   }
-  
+
   mem.tick();
   if (pred.has_result_for_broadcast()) {
     PredictorResult pred_result = pred.get_result_for_broadcast();
@@ -133,12 +133,12 @@ inline void CPU::Tick() {
       rs.receive_broadcast(pred_result.pc, pred_result.dest_tag.value());
     }
   }
-  
+
   dispatch();
-  
+
   LOG_DEBUG("--- Commit Stage ---");
   commit();
-  
+
   if (!stall_fetch && !rob.isFull()) {
     LOG_DEBUG("--- Fetch Stage ---");
     try {
@@ -148,7 +148,7 @@ inline void CPU::Tick() {
         fetched_instruction = instr;
         LOG_INFO("Fetched instruction from pc: " + to_hex(fetched_pc));
       }
-      
+
       if (fetched_instruction.has_value()) {
         LOG_DEBUG("--- Issue Stage ---");
         issue(fetched_instruction.value());
@@ -166,7 +166,7 @@ inline void CPU::Tick() {
       LOG_DEBUG("--- Fetch Stage stalled (branch misprediction recovery) ---");
     }
   }
-  
+
   stall_fetch = false;
 }
 
@@ -229,21 +229,25 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
   int id = rob.add_entry(instr, rd, pc - 4);
   if (id != -1) {
     int32_t vj = 0, vk = 0;
-    uint32_t qj = std::numeric_limits<uint32_t>::max(), qk = std::numeric_limits<uint32_t>::max();
+    uint32_t qj = std::numeric_limits<uint32_t>::max(),
+             qk = std::numeric_limits<uint32_t>::max();
 
     if (rs1.has_value()) {
       uint32_t rob_tag = reg_file.get_rob(rs1.value());
       if (rob_tag == std::numeric_limits<uint32_t>::max()) {
         vj = reg_file.read(rs1.value());
-        LOG_DEBUG("Source operand 1 (rs1) is ready: reg" + std::to_string(rs1.value()) + " = " + std::to_string(vj));
+        LOG_DEBUG("Source operand 1 (rs1) is ready: reg" +
+                  std::to_string(rs1.value()) + " = " + std::to_string(vj));
       } else {
         qj = rob_tag;
-        LOG_DEBUG("Source operand 1 (rs1) is waiting for ROB tag: " + std::to_string(qj));
+        LOG_DEBUG("Source operand 1 (rs1) is waiting for ROB tag: " +
+                  std::to_string(qj));
         // check ROB
         auto rob_value = rob.get_value(rob_tag);
         if (rob_value.has_value()) {
           vj = rob_value.value();
-          qj = std::numeric_limits<uint32_t>::max(); // Clear qj since we have the value
+          qj = std::numeric_limits<uint32_t>::max(); // Clear qj since we have
+                                                     // the value
           LOG_DEBUG("Resolved ROB value for rs1: " + std::to_string(vj));
         }
       }
@@ -251,24 +255,28 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
 
     if (rs2.has_value()) {
       uint32_t rob_tag = reg_file.get_rob(rs2.value());
-      if (rob_tag == std::numeric_limits<uint32_t>::max()) { // Register is ready
+      if (rob_tag ==
+          std::numeric_limits<uint32_t>::max()) { // Register is ready
         vk = reg_file.read(rs2.value());
-        LOG_DEBUG("Source operand 2 (rs2) is ready: reg" + std::to_string(rs2.value()) + " = " + std::to_string(vk));
+        LOG_DEBUG("Source operand 2 (rs2) is ready: reg" +
+                  std::to_string(rs2.value()) + " = " + std::to_string(vk));
       } else {
         qk = rob_tag;
-        LOG_DEBUG("Source operand 2 (rs2) is waiting for ROB tag: " + std::to_string(qk));
+        LOG_DEBUG("Source operand 2 (rs2) is waiting for ROB tag: " +
+                  std::to_string(qk));
         auto rob_value = rob.get_value(rob_tag);
         if (rob_value.has_value()) {
           vk = rob_value.value();
-          qk = std::numeric_limits<uint32_t>::max(); // Clear qk since we have the value
+          qk = std::numeric_limits<uint32_t>::max();
           LOG_DEBUG("Resolved ROB value for rs2: " + std::to_string(vk));
         }
       }
     } else {
       vk = imm.value_or(0);
-      LOG_DEBUG("Source operand 2 is an immediate value: " + std::to_string(vk));
+      LOG_DEBUG("Source operand 2 is an immediate value: " +
+                std::to_string(vk));
     }
-    
+
     rs.add_entry(instr, vj, vk, qj, qk, imm, id, pc - 4);
     LOG_DEBUG("Added entry to Reservation Station");
 
@@ -283,11 +291,11 @@ inline void CPU::issue(riscv::DecodedInstruction instr) {
       pc += std::get<riscv::J_Instruction>(instr).imm;
       pc -= 4; // because we already incremented PC in fetch
       LOG_DEBUG("JAL instruction, updated PC to: " + to_hex(pc));
-      } else if (std::holds_alternative<riscv::I_Instruction>(instr) &&
-                 std::holds_alternative<riscv::I_JumpOp>(
-                     std::get<riscv::I_Instruction>(instr).op)) {
+    } else if (std::holds_alternative<riscv::I_Instruction>(instr) &&
+               std::holds_alternative<riscv::I_JumpOp>(
+                   std::get<riscv::I_Instruction>(instr).op)) {
       // JALR
-      // do nothing 
+      // do nothing
       LOG_DEBUG("JALR instruction, updated PC to: " + to_hex(pc));
     }
 
@@ -310,11 +318,12 @@ inline void CPU::dispatch() {
     ReservationStationEntry &ent = rs.rs.get(i);
 
     // Skip if operands not ready
-    if (ent.qj != std::numeric_limits<uint32_t>::max() || ent.qk != std::numeric_limits<uint32_t>::max()) {
+    if (ent.qj != std::numeric_limits<uint32_t>::max() ||
+        ent.qk != std::numeric_limits<uint32_t>::max()) {
       LOG_DEBUG("RS entry " + std::to_string(i) + " waiting for operands (qj=" +
                 std::to_string(ent.qj) + ", qk=" + std::to_string(ent.qk) +
                 ") with instruction: " + riscv::to_string(ent.op));
-                // I_LoadOp, S_instruction
+      // I_LoadOp, S_instruction
       if (std::holds_alternative<riscv::S_Instruction>(ent.op)) {
         LSBInstruction instruction;
         instruction.op_type = std::get<riscv::S_Instruction>(ent.op).op;
@@ -395,8 +404,7 @@ inline void CPU::dispatch() {
                     std::to_string(ent.dest_tag) + ")");
           PredictorInstruction instruction;
           instruction.pc = ent.pc;
-          instruction.rs1 =
-              ent.vj;
+          instruction.rs1 = ent.vj;
           instruction.rs2 = 0; // JALR doesn't use rs2
           instruction.dest_tag = ent.dest_tag;
           instruction.imm = ent.imm;
@@ -468,8 +476,7 @@ inline void CPU::dispatch() {
         instruction.rs2 = 0;
         instruction.dest_tag = ent.dest_tag;
         instruction.rob_id = ent.dest_tag;
-        instruction.imm =
-            ent.imm;
+        instruction.imm = ent.imm;
         instruction.branch_type = std::get<riscv::J_Instruction>(ent.op).op;
         LOG_DEBUG("JAL: pc=" + std::to_string(instruction.pc) +
                   ", imm=" + std::to_string(instruction.imm));
@@ -496,14 +503,14 @@ inline void CPU::commit() {
   LOG_DEBUG("Committing completed instructions");
   // reg_file.print_debug_info();
   // rs.print_debug_info();
-  
+
   bool mispredicted = rob.commit(pc);
   if (mispredicted) {
     LOG_DEBUG("Branch misprediction detected, stalling fetch for next cycle");
     stall_fetch = true;
     fetched_instruction = std::nullopt;
   }
-  
+
   // rob.print_debug_info();
 }
 

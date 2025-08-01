@@ -1,10 +1,10 @@
 #ifndef CORE_REGISTER_FILE_HPP
 #define CORE_REGISTER_FILE_HPP
 
+#include "../utils/logger.hpp"
 #include <array>
 #include <cstdint>
 #include <limits>
-#include "../utils/logger.hpp"
 
 class RegisterFile {
 public:
@@ -18,13 +18,15 @@ public:
   // void print_debug_info() const;
 
   std::array<int32_t, 32> registers;
+
 private:
   std::array<uint32_t, 32> rob_id;
 };
 
 inline RegisterFile::RegisterFile() {
   registers.fill(0);
-  rob_id.fill(std::numeric_limits<uint32_t>::max()); // All registers initially available
+  rob_id.fill(std::numeric_limits<uint32_t>::max()); // All registers initially
+                                                     // available
 }
 
 inline void RegisterFile::write(uint32_t rd, int32_t value) {
@@ -66,7 +68,8 @@ inline void RegisterFile::flush() {
 // inline void RegisterFile::print_debug_info() const {
 //   LOG_DEBUG("Register File Debug Info:");
 //   for (size_t i = 0; i < registers.size(); ++i) {
-//     LOG_DEBUG("reg[" + std::to_string(i) + "] = " + std::to_string(registers[i]) +
+//     LOG_DEBUG("reg[" + std::to_string(i) + "] = " +
+//     std::to_string(registers[i]) +
 //               ", ROB ID: " + std::to_string(rob_id[i]));
 //   }
 // }

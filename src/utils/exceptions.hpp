@@ -1,7 +1,6 @@
 #ifndef UTILS_EXCEPTIONS_HPP
 #define UTILS_EXCEPTIONS_HPP
 
-#include <stdexcept>
 #include <string>
 
 /**
@@ -10,21 +9,17 @@
  */
 class ProgramTerminationException : public std::exception {
 private:
-    std::string message;
-    int exit_code;
+  std::string message;
+  int exit_code;
 
 public:
-    ProgramTerminationException(int code) : exit_code(code) {
-        message = "Program terminated with exit code: " + std::to_string(code);
-    }
+  ProgramTerminationException(int code) : exit_code(code) {
+    message = "Program terminated with exit code: " + std::to_string(code);
+  }
 
-    const char* what() const noexcept override {
-        return message.c_str();
-    }
+  const char *what() const noexcept override { return message.c_str(); }
 
-    int get_exit_code() const {
-        return exit_code;
-    }
+  int get_exit_code() const { return exit_code; }
 };
 
-#endif // UTILS_EXCEPTIONS_HPP 
+#endif // UTILS_EXCEPTIONS_HPP

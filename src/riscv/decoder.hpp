@@ -2,7 +2,6 @@
 #define RISCV_DECODER_HPP
 
 #include "instruction.hpp"
-#include <stdexcept>
 
 namespace riscv {
 

@@ -2,17 +2,19 @@
 #define TOMASULO_RESERVATION_STATION_HPP
 
 #include "../riscv/instruction.hpp"
-#include "../utils/queue.hpp"
 #include "../utils/logger.hpp"
-#include "../core/register_file.hpp"
+#include "../utils/queue.hpp"
 #include <cstdint>
 #include <limits>
 #include <optional>
-#include <functional>
 
 struct ReservationStationEntry {
   ReservationStationEntry() = default;
-  ReservationStationEntry(riscv::DecodedInstruction op, uint32_t qj, uint32_t qk, int vj, int vk, int imm, uint32_t dest_tag, uint32_t pc = 0) : op(op), vj(vj), vk(vk), qj(qj), qk(qk), imm(imm), dest_tag(dest_tag), pc(pc) {}
+  ReservationStationEntry(riscv::DecodedInstruction op, uint32_t qj,
+                          uint32_t qk, int vj, int vk, int imm,
+                          uint32_t dest_tag, uint32_t pc = 0)
+      : op(op), vj(vj), vk(vk), qj(qj), qk(qk), imm(imm), dest_tag(dest_tag),
+        pc(pc) {}
   riscv::DecodedInstruction op;
   int32_t vj, vk;
   uint32_t qj, qk;
@@ -22,41 +24,52 @@ struct ReservationStationEntry {
 };
 
 class ReservationStation {
-  RegisterFile &reg_file;
 public:
   CircularQueue<ReservationStationEntry> rs;
-  ReservationStation(RegisterFile &reg_file);
-  void add_entry(const riscv::DecodedInstruction &op, int32_t vj, int32_t vk, uint32_t qj, uint32_t qk, std::optional<int32_t> imm, int dest_tag, uint32_t pc = 0);
+  ReservationStation();
+  void add_entry(const riscv::DecodedInstruction &op, int32_t vj, int32_t vk,
+                 uint32_t qj, uint32_t qk, std::optional<int32_t> imm,
+                 int dest_tag, uint32_t pc = 0);
   void receive_broadcast(int32_t value, uint32_t dest_tag);
   void flush();
   // void print_debug_info();
 };
 
-inline ReservationStation::ReservationStation(RegisterFile &reg_file) : reg_file(reg_file), rs(32) {
+inline ReservationStation::ReservationStation() : rs(32) {
   LOG_DEBUG("ReservationStation initialized with capacity: 32");
 }
 
-inline void ReservationStation::add_entry(const riscv::DecodedInstruction &op, int32_t vj, int32_t vk, uint32_t qj, uint32_t qk, std::optional<int32_t> imm, int dest_tag, uint32_t pc) {
+inline void ReservationStation::add_entry(const riscv::DecodedInstruction &op,
+                                          int32_t vj, int32_t vk, uint32_t qj,
+                                          uint32_t qk,
+                                          std::optional<int32_t> imm,
+                                          int dest_tag, uint32_t pc) {
   if (!rs.isFull()) {
-    LOG_DEBUG("Adding pre-processed entry to Reservation Station with dest_tag: " + std::to_string(dest_tag));
-    
-    ReservationStationEntry ent(op, qj, qk, vj, vk, imm.value_or(0), dest_tag, pc);
-    
+    LOG_DEBUG(
+        "Adding pre-processed entry to Reservation Station with dest_tag: " +
+        std::to_string(dest_tag));
+
+    ReservationStationEntry ent(op, qj, qk, vj, vk, imm.value_or(0), dest_tag,
+                                pc);
+
     rs.enqueue(ent);
-    LOG_DEBUG("Entry added successfully. qj=" + std::to_string(qj) + ", qk=" + std::to_string(qk));
+    LOG_DEBUG("Entry added successfully. qj=" + std::to_string(qj) +
+              ", qk=" + std::to_string(qk));
   } else {
     LOG_WARN("Reservation Station is full, cannot add new entry");
   }
 }
 
-inline void ReservationStation::receive_broadcast(int32_t value, uint32_t dest_tag) {
-  LOG_DEBUG("Receiving broadcast for tag: " + std::to_string(dest_tag) + ", value: " + std::to_string(value));
+inline void ReservationStation::receive_broadcast(int32_t value,
+                                                  uint32_t dest_tag) {
+  LOG_DEBUG("Receiving broadcast for tag: " + std::to_string(dest_tag) +
+            ", value: " + std::to_string(value));
   int updated_entries = 0;
-  
+
   for (int i = 0; i < rs.size(); i++) {
     ReservationStationEntry &ent = rs.get(i);
     bool updated = false;
-    
+
     if (ent.qj == dest_tag) {
       ent.vj = value;
       ent.qj = std::numeric_limits<uint32_t>::max();
@@ -69,25 +82,27 @@ inline void ReservationStation::receive_broadcast(int32_t value, uint32_t dest_t
       LOG_DEBUG("Updated operand vk for RS entry " + std::to_string(i));
       updated = true;
     }
-    
+
     if (updated) {
       updated_entries++;
-      if (ent.qj == std::numeric_limits<uint32_t>::max() && ent.qk == std::numeric_limits<uint32_t>::max()) {
+      if (ent.qj == std::numeric_limits<uint32_t>::max() &&
+          ent.qk == std::numeric_limits<uint32_t>::max()) {
         LOG_DEBUG("RS entry " + std::to_string(i) + " now ready for execution");
       }
     }
   }
-  
-  LOG_DEBUG("Broadcast updated " + std::to_string(updated_entries) + " reservation station entries");
+
+  LOG_DEBUG("Broadcast updated " + std::to_string(updated_entries) +
+            " reservation station entries");
 }
 
 inline void ReservationStation::flush() {
   LOG_DEBUG("Flushing Reservation Station - clearing all entries");
-  
+
   while (!rs.isEmpty()) {
     rs.dequeue();
   }
-  
+
   LOG_DEBUG("Reservation Station flush completed");
 }
 
@@ -95,7 +110,8 @@ inline void ReservationStation::flush() {
 //   LOG_DEBUG("Reservation Station Debug Info:");
 //   for (int i = 0; i < rs.size(); ++i) {
 //     const ReservationStationEntry &ent = rs.get(i);
-//     LOG_DEBUG("RS[" + std::to_string(i) + "] - op: " + riscv::to_string(ent.op) +
+//     LOG_DEBUG("RS[" + std::to_string(i) + "] - op: " +
+//     riscv::to_string(ent.op) +
 //               ", vj: " + std::to_string(ent.vj) +
 //               ", vk: " + std::to_string(ent.vk) +
 //               ", qj: " + std::to_string(ent.qj) +
